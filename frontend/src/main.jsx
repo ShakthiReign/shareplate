@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const API = (import.meta.env.VITE_API_URL || "http://localhost:8080/api").replace(/\/$/, "");
+const API = (import.meta.env.VITE_API_URL || "https://shareplate-swa2.onrender.com/api").replace(/\/$/, "");
 
 const authFetch = async (url, options = {}) => {
     const token = localStorage.getItem("shareplate_token");
