@@ -20,7 +20,7 @@ import com.shareplate.service.PickupTaskService;
 
 @RestController
 @RequestMapping("/api/tasks")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app"})
 public class PickupTaskController {
 
 	private final PickupTaskService service;
