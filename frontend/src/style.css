@@ -1497,3 +1497,23 @@ article.modern-card, article.code-card, article.task-card, article.volunteer-car
         font-size: 20px;
     }
 }
+/* Password requirement rule indicators */
+.password-checklist li .rule-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--sp-border-soft);
+    color: var(--sp-text-muted);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.password-checklist li.valid .rule-badge {
+    background: var(--sp-primary);
+    color: #ffffff;
+}

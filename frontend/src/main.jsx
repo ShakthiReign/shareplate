@@ -56,19 +56,19 @@ function PasswordRequirements({ password }) {
             <span className="checklist-title">Password must contain:</span>
             <ul>
                 <li className={rules.length ? "valid" : ""}>
-                    <i>{rules.length ? "âœ“" : "â—‹"}</i> 8 to 72 characters
+                    <span className="rule-badge">{rules.length ? "✓" : "•"}</span> 8 to 72 characters
                 </li>
                 <li className={rules.upper ? "valid" : ""}>
-                    <i>{rules.upper ? "âœ“" : "â—‹"}</i> At least 1 uppercase letter (A-Z)
+                    <span className="rule-badge">{rules.upper ? "✓" : "•"}</span> At least 1 uppercase letter (A-Z)
                 </li>
                 <li className={rules.lower ? "valid" : ""}>
-                    <i>{rules.lower ? "âœ“" : "â—‹"}</i> At least 1 lowercase letter (a-z)
+                    <span className="rule-badge">{rules.lower ? "✓" : "•"}</span> At least 1 lowercase letter (a-z)
                 </li>
                 <li className={rules.digit ? "valid" : ""}>
-                    <i>{rules.digit ? "âœ“" : "â—‹"}</i> At least 1 digit (0-9)
+                    <span className="rule-badge">{rules.digit ? "✓" : "•"}</span> At least 1 digit (0-9)
                 </li>
                 <li className={rules.special ? "valid" : ""}>
-                    <i>{rules.special ? "âœ“" : "â—‹"}</i> At least 1 special character (!@#$%...)
+                    <span className="rule-badge">{rules.special ? "✓" : "•"}</span> At least 1 special character (!@#$%...)
                 </li>
             </ul>
         </div>
@@ -1262,8 +1262,8 @@ function App() {
                 return {
                     id: t.id,
                     title: listing?.foodName || `Pickup Task #${t.id}`,
-                    quantity: listing?.quantity || "â€“",
-                    location: listing?.location || "â€“",
+                    quantity: listing?.quantity || "Ã¢â‚¬â€œ",
+                    location: listing?.location || "Ã¢â‚¬â€œ",
                     status: t.status,
                     time: t.deliveredAt || t.collectedAt || "Pending",
                 };
@@ -1276,10 +1276,10 @@ function App() {
         if (!deadlineStr) return null;
         const diffMs = new Date(deadlineStr).getTime() - Date.now();
         const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffMs <= 0) return <span className="urgency-badge expired">âš  Expired</span>;
-        if (diffHrs < 3) return <span className="urgency-badge critical">ðŸ”¥ &lt;3h left</span>;
-        if (diffHrs < 12) return <span className="urgency-badge urgent">â± {diffHrs}h left</span>;
-        return <span className="urgency-badge calm">â± {diffHrs}h left</span>;
+        if (diffMs <= 0) return <span className="urgency-badge expired">Ã¢Å¡Â  Expired</span>;
+        if (diffHrs < 3) return <span className="urgency-badge critical">Ã°Å¸â€Â¥ &lt;3h left</span>;
+        if (diffHrs < 12) return <span className="urgency-badge urgent">Ã¢ÂÂ± {diffHrs}h left</span>;
+        return <span className="urgency-badge calm">Ã¢ÂÂ± {diffHrs}h left</span>;
     };
 
     const renderAvatarDisplay = (size = "normal") => {
@@ -1297,7 +1297,7 @@ function App() {
             {/* TOP NAVIGATION BAR */}
             <header className="main-header">
                 <div className="brand-group">
-                    <div className="brand-icon">ðŸ²</div>
+                    <div className="brand-icon">Ã°Å¸ÂÂ²</div>
                     <div>
                         <h1>SharePlate</h1>
                         <p>Surplus food rescue & coordination</p>
@@ -1325,7 +1325,7 @@ function App() {
                         onClick={toggleTheme}
                         aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
                     >
-                        {theme === "dark" ? "â˜€ Light" : "â˜¾ Dark"}
+                        {theme === "dark" ? "Ã¢Ëœâ‚¬ Light" : "Ã¢ËœÂ¾ Dark"}
                     </button>
 
                     {user && (
@@ -1353,7 +1353,7 @@ function App() {
                     <aside className={`menu-drawer ${menuOpen ? "open" : ""}`}>
                         <div className="drawer-header">
                             <h3>Account & Navigation</h3>
-                            <button className="close-drawer" onClick={() => setMenuOpen(false)}>âœ•</button>
+                            <button className="close-drawer" onClick={() => setMenuOpen(false)}>Ã¢Å“â€¢</button>
                         </div>
 
                         <div className="drawer-user-info" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
@@ -1362,34 +1362,34 @@ function App() {
                                 <strong>{user.name}</strong>
                                 <small>{user.email}</small>
                                 <span className="role-tag">
-                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "âœ“ Verified" : "â€¢ Pending")}
+                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "Ã¢Å“â€œ Verified" : "Ã¢â‚¬Â¢ Pending")}
                                 </span>
                             </div>
                         </div>
 
                         <div className="drawer-nav">
                             <div className="nav-item active" onClick={() => setMenuOpen(false)}>
-                                <span>ðŸ“‹</span> Active Dashboard
+                                <span>Ã°Å¸â€œâ€¹</span> Active Dashboard
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("history"); }}>
-                                <span>ðŸ“œ</span> Rescue Activity History
+                                <span>Ã°Å¸â€œÅ“</span> Rescue Activity History
                             </div>
                             {user.role === "NGO" && !user.ngoVerified && (
                                 <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("ngo-verify"); }}>
-                                    <span>ðŸ›¡ï¸</span> Complete NGO Verification
+                                    <span>Ã°Å¸â€ºÂ¡Ã¯Â¸Â</span> Complete NGO Verification
                                 </div>
                             )}
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
-                                <span>ðŸ‘¤</span> Profile & Avatar
+                                <span>Ã°Å¸â€˜Â¤</span> Profile & Avatar
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("security"); }}>
-                                <span>ðŸ”’</span> Security & Password
+                                <span>Ã°Å¸â€â€™</span> Security & Password
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); refreshAll(); }}>
-                                <span>ðŸ”„</span> Refresh Platform Data
+                                <span>Ã°Å¸â€â€ž</span> Refresh Platform Data
                             </div>
                             <div className="nav-item" onClick={toggleTheme}>
-                                <span>ðŸŒ“</span> Theme: <b>{theme === "dark" ? "Dark" : "Light"}</b>
+                                <span>Ã°Å¸Å’â€œ</span> Theme: <b>{theme === "dark" ? "Dark" : "Light"}</b>
                             </div>
                         </div>
 
@@ -1413,7 +1413,7 @@ function App() {
                                 {activeModal === "security" && "Security & Password Management"}
                                 {activeModal === "ngo-verify" && "NGO Legal Verification"}
                             </h3>
-                            <button className="close-drawer" onClick={() => setActiveModal(null)}>âœ•</button>
+                            <button className="close-drawer" onClick={() => setActiveModal(null)}>Ã¢Å“â€¢</button>
                         </div>
 
                         {/* NGO VERIFICATION ONBOARDING MODAL */}
@@ -1474,7 +1474,7 @@ function App() {
 
                                 <label>Choose Avatar Icon</label>
                                 <div className="avatar-preset-grid">
-                                    {["ðŸŒ±", "ðŸ²", "ðŸŒ¾", "ðŸ¦¸", "ðŸ¤", "ðŸ“¦", "ðŸ›µ", "â¤ï¸", "ðŸŒŸ", "âœ¨"].map((emoji) => (
+                                    {["Ã°Å¸Å’Â±", "Ã°Å¸ÂÂ²", "Ã°Å¸Å’Â¾", "Ã°Å¸Â¦Â¸", "Ã°Å¸Â¤Â", "Ã°Å¸â€œÂ¦", "Ã°Å¸â€ºÂµ", "Ã¢ÂÂ¤Ã¯Â¸Â", "Ã°Å¸Å’Å¸", "Ã¢Å“Â¨"].map((emoji) => (
                                         <button
                                             key={emoji}
                                             type="button"
@@ -1513,8 +1513,8 @@ function App() {
                                                 <div>
                                                     <strong>{item.title}</strong>
                                                     <div className="history-meta">
-                                                        <span>ðŸ½ {item.quantity} meals</span>
-                                                        <span>ðŸ“ {item.location}</span>
+                                                        <span>Ã°Å¸ÂÂ½ {item.quantity} meals</span>
+                                                        <span>Ã°Å¸â€œÂ {item.location}</span>
                                                     </div>
                                                 </div>
                                                 <div className="history-right">
@@ -1588,7 +1588,7 @@ function App() {
                     showResetPassword ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">ðŸ”</div>
+                                <div className="verification-icon">Ã°Å¸â€Â</div>
                             </div>
                             <div className="eyebrow">ACCOUNT SECURITY</div>
                             <h2>Create a new password</h2>
@@ -1645,7 +1645,7 @@ function App() {
                                     )}
                                     <div className="auth-footer-nav">
                                         <button type="button" className="text-button" onClick={openLogin}>
-                                            â† Back to sign in
+                                            Ã¢â€ Â Back to sign in
                                         </button>
                                     </div>
                                 </>
@@ -1654,7 +1654,7 @@ function App() {
                     ) : showForgotPassword ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">âœ‰</div>
+                                <div className="verification-icon">Ã¢Å“â€°</div>
                             </div>
                             <div className="eyebrow">ACCOUNT RECOVERY</div>
                             <h2>Forgot your password?</h2>
@@ -1686,14 +1686,14 @@ function App() {
                             )}
                             <div className="auth-footer-nav">
                                 <button type="button" className="text-button" onClick={openLogin}>
-                                    â† Back to sign in
+                                    Ã¢â€ Â Back to sign in
                                 </button>
                             </div>
                         </section>
                     ) : showVerification ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">âœ‰</div>
+                                <div className="verification-icon">Ã¢Å“â€°</div>
                             </div>
                             <div className="eyebrow">ONE SMALL STEP</div>
                             <h2>Verify your email</h2>
@@ -1766,7 +1766,7 @@ function App() {
                             </div>
                             <div className="auth-footer-nav">
                                 <button type="button" className="text-button" onClick={openLogin}>
-                                    â† Back to sign in
+                                    Ã¢â€ Â Back to sign in
                                 </button>
                             </div>
                         </section>
@@ -1800,9 +1800,12 @@ function App() {
                                     type="tel"
                                     value={signupPhone}
                                     onChange={(event) => setSignupPhone(event.target.value)}
-                                    placeholder="Example: 9876543210"
+                                    placeholder="e.g. 9876543210 or +91 9876543210"
                                     required
                                 />
+                                <small className="field-hint">
+                                    Your phone number should look like: 10-digit mobile (e.g. 9876543210)
+                                </small>
 
                                 <label>Password</label>
                                 <input
@@ -1966,7 +1969,7 @@ function App() {
                                                         onClick={handleGetDonorLocation}
                                                         disabled={locatingDonor}
                                                     >
-                                                        ðŸ“ {locatingDonor ? "Locating..." : "Use Current GPS"}
+                                                        Ã°Å¸â€œÂ {locatingDonor ? "Locating..." : "Use Current GPS"}
                                                     </button>
                                                 </div>
                                                 <input
@@ -1977,7 +1980,7 @@ function App() {
                                                 />
                                                 {listingCoords.lat && (
                                                     <small className="field-hint gps-active">
-                                                        âœ“ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
+                                                        Ã¢Å“â€œ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
                                                     </small>
                                                 )}
                                             </div>
@@ -2055,11 +2058,11 @@ function App() {
                                                         {task.volunteerName && (
                                                             <div className="delivery-contact-banner">
                                                                 <div>
-                                                                    <strong>ðŸš´ Assigned Driver:</strong> {task.volunteerName}
+                                                                    <strong>Ã°Å¸Å¡Â´ Assigned Driver:</strong> {task.volunteerName}
                                                                 </div>
                                                                 {task.volunteerPhone && (
                                                                     <a href={`tel:${task.volunteerPhone}`} className="call-btn">
-                                                                        ðŸ“ž Call Driver ({task.volunteerPhone})
+                                                                        Ã°Å¸â€œÅ¾ Call Driver ({task.volunteerPhone})
                                                                     </a>
                                                                 )}
                                                             </div>
@@ -2081,7 +2084,7 @@ function App() {
                                                                         className="copy-chip"
                                                                         onClick={() => copyCode(code, `pickup-${task.id}`)}
                                                                     >
-                                                                        {copiedCodeKey === `pickup-${task.id}` ? "Copied! âœ“" : "Copy Code"}
+                                                                        {copiedCodeKey === `pickup-${task.id}` ? "Copied! Ã¢Å“â€œ" : "Copy Code"}
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -2118,18 +2121,18 @@ function App() {
                                                 <div>
                                                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                                         <h3>{volunteer.name}</h3>
-                                                        <span className="online-tag">â— ONLINE</span>
+                                                        <span className="online-tag">Ã¢â€”Â ONLINE</span>
                                                     </div>
                                                     <div className="details mini-details">
                                                         <div>ID: #{volunteer.id}</div>
                                                         <div>{volunteer.email}</div>
                                                         {volunteer.phone && (
                                                             <div>
-                                                                ðŸ“ž <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
+                                                                Ã°Å¸â€œÅ¾ <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
                                                             </div>
                                                         )}
                                                         <div className={`verified-state ${volunteer.verified ? "yes" : "no"}`}>
-                                                            {volunteer.verified ? "Verified Volunteer âœ“" : "Pending Verification"}
+                                                            {volunteer.verified ? "Verified Volunteer Ã¢Å“â€œ" : "Pending Verification"}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2168,12 +2171,12 @@ function App() {
                                                                 <div>Volunteer: <b>{task.volunteerName || assignedVolunteer?.name || `ID #${task.volunteerId}`}</b></div>
                                                                 {task.volunteerPhone && (
                                                                     <div>
-                                                                        ðŸ“ž Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
+                                                                        Ã°Å¸â€œÅ¾ Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
                                                                     </div>
                                                                 )}
                                                                 {task.donorPhone && (
                                                                     <div>
-                                                                        ðŸ“ž Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
+                                                                        Ã°Å¸â€œÅ¾ Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
                                                                     </div>
                                                                 )}
                                                                 <div>Task #{task.id}</div>
@@ -2182,14 +2185,14 @@ function App() {
                                                             {/* DRIVING LOCATION TELEMETRY */}
                                                             {task.volunteerLatitude && task.volunteerLongitude && (
                                                                 <div className="driver-loc-card">
-                                                                    <span>ðŸ“ Volunteer Live Driving GPS:</span>
+                                                                    <span>Ã°Å¸â€œÂ Volunteer Live Driving GPS:</span>
                                                                     <a
                                                                         href={`https://www.google.com/maps?q=${task.volunteerLatitude},${task.volunteerLongitude}`}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                         className="map-link-btn"
                                                                     >
-                                                                        View Driver Live on Maps â†—
+                                                                        View Driver Live on Maps Ã¢â€ â€”
                                                                     </a>
                                                                 </div>
                                                             )}
@@ -2210,7 +2213,7 @@ function App() {
                                                                             className="copy-chip"
                                                                             onClick={() => copyCode(code, `delivery-${task.id}`)}
                                                                         >
-                                                                            {copiedCodeKey === `delivery-${task.id}` ? "Copied! âœ“" : "Copy Code"}
+                                                                            {copiedCodeKey === `delivery-${task.id}` ? "Copied! Ã¢Å“â€œ" : "Copy Code"}
                                                                         </button>
                                                                     )}
                                                                 </div>
@@ -2258,7 +2261,7 @@ function App() {
                                                 <div className="delivery-ops-panel">
                                                     {task.donorPhone && (
                                                         <div className="contact-row">
-                                                            <span>ðŸ“ž Donor:</span>
+                                                            <span>Ã°Å¸â€œÅ¾ Donor:</span>
                                                             <a href={`tel:${task.donorPhone}`} className="call-btn-small">
                                                                 Call Donor ({task.donorPhone})
                                                             </a>
@@ -2266,7 +2269,7 @@ function App() {
                                                     )}
                                                     {task.ngoPhone && (
                                                         <div className="contact-row">
-                                                            <span>ðŸ¢ NGO Hub:</span>
+                                                            <span>Ã°Å¸ÂÂ¢ NGO Hub:</span>
                                                             <a href={`tel:${task.ngoPhone}`} className="call-btn-small">
                                                                 Call NGO ({task.ngoPhone})
                                                             </a>
@@ -2281,7 +2284,7 @@ function App() {
                                                             rel="noopener noreferrer"
                                                             className="nav-btn-gmaps"
                                                         >
-                                                            ðŸ—ºï¸ Open Google Maps Driving Directions
+                                                            Ã°Å¸â€”ÂºÃ¯Â¸Â Open Google Maps Driving Directions
                                                         </a>
                                                     ) : task.pickupAddress ? (
                                                         <a
@@ -2290,7 +2293,7 @@ function App() {
                                                             rel="noopener noreferrer"
                                                             className="nav-btn-gmaps"
                                                         >
-                                                            ðŸ—ºï¸ Search Pickup Address in Maps
+                                                            Ã°Å¸â€”ÂºÃ¯Â¸Â Search Pickup Address in Maps
                                                         </a>
                                                     ) : null}
                                                 </div>
@@ -2346,7 +2349,7 @@ function App() {
                         {/* LIVE SEARCH & FILTER CONTROLS */}
                         <div className="controls-bar">
                             <div className="search-wrap">
-                                <span className="search-icon">ðŸ”</span>
+                                <span className="search-icon">Ã°Å¸â€Â</span>
                                 <input
                                     type="text"
                                     placeholder="Search food items or location..."
@@ -2354,7 +2357,7 @@ function App() {
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                                 {searchTerm && (
-                                    <button className="clear-search" onClick={() => setSearchTerm("")}>âœ•</button>
+                                    <button className="clear-search" onClick={() => setSearchTerm("")}>Ã¢Å“â€¢</button>
                                 )}
                             </div>
 
@@ -2372,7 +2375,7 @@ function App() {
                             </div>
 
                             <button className="refresh-pill" onClick={refreshAll}>
-                                <span>â†»</span> Refresh
+                                <span>Ã¢â€ Â»</span> Refresh
                             </button>
                         </div>
 
@@ -2417,7 +2420,7 @@ function App() {
                                                         ).toLowerCase()}`}
                                                     >
                                                         <i aria-hidden="true">
-                                                            {isCompleted ? "âœ“" : listing.status === "AVAILABLE" ? "â—" : "â†—"}
+                                                            {isCompleted ? "Ã¢Å“â€œ" : listing.status === "AVAILABLE" ? "Ã¢â€”Â" : "Ã¢â€ â€”"}
                                                         </i>
                                                         {isCompleted ? "DELIVERED" : listing.status}
                                                     </span>
@@ -2431,16 +2434,16 @@ function App() {
 
                                             <div className="details meta-card">
                                                 <div>
-                                                    <span>ðŸ½</span> <strong>{listing.quantity}</strong> meals prepared
+                                                    <span>Ã°Å¸ÂÂ½</span> <strong>{listing.quantity}</strong> meals prepared
                                                 </div>
                                                 <div>
-                                                    <span>ðŸ“</span> {listing.location}
+                                                    <span>Ã°Å¸â€œÂ</span> {listing.location}
                                                     {listing.latitude && (
-                                                        <span className="gps-verified-tag">GPS âœ“</span>
+                                                        <span className="gps-verified-tag">GPS Ã¢Å“â€œ</span>
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <span>â°</span> Deadline: {formatISTTime(listing.pickupDeadline)}
+                                                    <span>Ã¢ÂÂ°</span> Deadline: {formatISTTime(listing.pickupDeadline)}
                                                 </div>
                                             </div>
 
@@ -2454,7 +2457,7 @@ function App() {
 
                                             {isCompleted && (
                                                 <div className="impact-seal" role="status" aria-label="Food successfully delivered">
-                                                    <div className="seal-mark">âœ“</div>
+                                                    <div className="seal-mark">Ã¢Å“â€œ</div>
                                                     <div className="seal-copy">
                                                         <strong>Successfully delivered</strong>
                                                         <span>
@@ -2502,11 +2505,11 @@ function App() {
                                                 user.role === "NGO" &&
                                                 (existingTask ? (
                                                     <div className="assignment-box">
-                                                        <h4>âœ… Volunteer Assigned</h4>
+                                                        <h4>Ã¢Å“â€¦ Volunteer Assigned</h4>
                                                         <p>Volunteer: <b>{assignedVolunteer ? assignedVolunteer.name : "Assigned"}</b></p>
                                                         <p>Volunteer ID: #{existingTask.volunteerId}</p>
                                                         <button disabled className="assigned-pill">
-                                                            âœ“ Assigned to Delivery
+                                                            Ã¢Å“â€œ Assigned to Delivery
                                                         </button>
                                                     </div>
                                                 ) : (
@@ -2539,7 +2542,7 @@ function App() {
                                 })
                             ) : (
                                 <div className="empty modern-empty">
-                                    <span className="empty-icon">ðŸƒ</span>
+                                    <span className="empty-icon">Ã°Å¸ÂÆ’</span>
                                     <h3>No food listings match your criteria</h3>
                                     <p>Check back shortly or post a surplus food listing to get started.</p>
                                 </div>
