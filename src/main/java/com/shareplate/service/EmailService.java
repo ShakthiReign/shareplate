@@ -45,7 +45,7 @@ message.setText("Hi " + recipientName + ",\n\n" + "Welcome to SharePlate!\n\n"
 mailSender.send(message);
 log.info("Verification email sent successfully to {}", recipientEmail);
 } catch (Exception e) {
-log.error("SMTP delivery failed for {}: {}. Proceeding with OTP in logs.", recipientEmail, e.getMessage());
+log.error("SMTP delivery failed for {}: {}. OTP printed above for testing.", recipientEmail, e.getMessage());
 }
 }
 
@@ -72,7 +72,7 @@ message.setText("Hi " + recipientName + ",\n\n" + "We received a request to rese
 mailSender.send(message);
 log.info("Password reset email sent successfully to {}", recipientEmail);
 } catch (Exception e) {
-log.error("SMTP delivery failed for {}: {}. Proceeding with reset link in logs.", recipientEmail, e.getMessage());
+log.error("SMTP delivery failed for {}: {}. Link printed above for testing.", recipientEmail, e.getMessage());
 }
 }
 }
