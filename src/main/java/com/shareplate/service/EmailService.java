@@ -1,4 +1,4 @@
-﻿package com.shareplate.service;
+package com.shareplate.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
