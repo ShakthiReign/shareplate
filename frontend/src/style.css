@@ -113,6 +113,56 @@ body {
     gap: 10px;
 }
 
+/* SWIGGY / ZOMATO DUTY TOGGLE BUTTON */
+.duty-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.duty-toggle-btn.online {
+    background: #ecfdf5;
+    color: #065f46;
+    border-color: #10b981;
+}
+
+[data-theme="dark"] .duty-toggle-btn.online {
+    background: #064e3b;
+    color: #a7f3d0;
+    border-color: #059669;
+}
+
+.duty-toggle-btn.offline {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #f87171;
+}
+
+[data-theme="dark"] .duty-toggle-btn.offline {
+    background: #450a0a;
+    color: #fca5a5;
+    border-color: #ef4444;
+}
+
+.duty-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+}
+
+.duty-toggle-btn.online .duty-dot {
+    box-shadow: 0 0 8px #10b981;
+}
+
 .theme-toggle {
     border: 1px solid var(--sp-border);
     background: var(--sp-surface);
@@ -766,6 +816,50 @@ label {
     font-weight: 700;
 }
 
+.label-with-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+}
+
+.label-with-action label {
+    margin-top: 0;
+}
+
+.gps-btn {
+    background: var(--sp-primary-soft);
+    color: var(--sp-primary);
+    border: 1px solid var(--sp-primary);
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.gps-btn:hover {
+    background: var(--sp-primary);
+    color: white;
+}
+
+.gps-active {
+    color: var(--sp-primary);
+    font-weight: 600;
+}
+
+.gps-verified-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #10b981;
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+}
+
 input, textarea, select {
     width: 100%;
     border: 1px solid var(--sp-border);
@@ -897,6 +991,30 @@ article.modern-card, article.code-card, article.task-card, article.volunteer-car
     color: var(--sp-text);
 }
 
+.online-tag {
+    font-size: 10px;
+    font-weight: 850;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #15803d;
+}
+
+[data-theme="dark"] .online-tag {
+    background: #052e16;
+    color: #86efac;
+}
+
+.phone-link {
+    color: var(--sp-primary);
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.phone-link:hover {
+    text-decoration: underline;
+}
+
 .listing-kicker {
     margin-bottom: 5px;
     color: var(--sp-text-muted);
@@ -930,6 +1048,118 @@ article.modern-card, article.code-card, article.task-card, article.volunteer-car
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.donor-code-pill {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #064e3b;
+    border: 1px dashed #10b981;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.donor-code-pill span {
+    color: #a7f3d0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.donor-code-pill strong {
+    color: #ffffff;
+    font-size: 18px;
+    letter-spacing: 3px;
+    font-family: monospace;
+}
+
+/* =========================================================
+   SWIGGY / ZOMATO DISPATCH & NAVIGATION STYLES
+   ========================================================= */
+.delivery-contact-banner {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--sp-surface-soft);
+    border: 1px solid var(--sp-border-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.call-btn {
+    background: var(--sp-primary);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 750;
+    display: inline-flex;
+    align-items: center;
+}
+
+.delivery-ops-panel {
+    margin: 14px 0;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--sp-surface-soft);
+    border: 1px solid var(--sp-border-soft);
+    display: grid;
+    gap: 8px;
+}
+
+.contact-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+}
+
+.call-btn-small {
+    background: var(--sp-primary-soft);
+    color: var(--sp-primary);
+    border: 1px solid var(--sp-primary);
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.nav-btn-gmaps {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #16a34a;
+    color: white;
+    padding: 10px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+}
+
+.driver-loc-card {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: var(--sp-surface-soft);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.map-link-btn {
+    color: var(--sp-primary);
+    font-weight: 800;
+    text-decoration: none;
 }
 
 /* =========================================================

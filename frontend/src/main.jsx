@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const API = "https://shareplate-swa2.onrender.com/api";
+const API = (import.meta.env.VITE_API_URL || "https://shareplate-swa2.onrender.com/api").replace(/\/$/, "");
 
 const authFetch = async (url, options = {}) => {
     const token = localStorage.getItem("shareplate_token");
@@ -17,6 +17,19 @@ const authFetch = async (url, options = {}) => {
     return fetch(url, {
         ...options,
         headers,
+    });
+};
+
+const formatISTTime = (isoString) => {
+    if (!isoString) return "Pending";
+    const normalized = (isoString.includes("Z") || isoString.includes("+")) ? isoString : `${isoString}Z`;
+    const date = new Date(normalized);
+    if (isNaN(date.getTime())) return isoString;
+    return date.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
     });
 };
 
@@ -67,7 +80,7 @@ function App() {
 
     // HAMBURGER / MODAL STATES
     const [menuOpen, setMenuOpen] = useState(false);
-    const [activeModal, setActiveModal] = useState(null); // 'profile' | 'history' | 'security' | 'ngo-verify' | null
+    const [activeModal, setActiveModal] = useState(null);
 
     // NGO VERIFICATION FORM
     const [darpanId, setDarpanId] = useState("");
@@ -100,6 +113,7 @@ function App() {
     const [showSignup, setShowSignup] = useState(false);
     const [signupName, setSignupName] = useState("");
     const [signupEmail, setSignupEmail] = useState("");
+    const [signupPhone, setSignupPhone] = useState("");
     const [signupPassword, setSignupPassword] = useState("");
     const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
     const [signupRole, setSignupRole] = useState("DONOR");
@@ -128,14 +142,15 @@ function App() {
     const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
     const [resetTokenChecking, setResetTokenChecking] = useState(false);
 
-    // FOOD LISTINGS
+    // FOOD LISTINGS & GPS
     const [listings, setListings] = useState([]);
     const [msg, setMsg] = useState("");
-
     const [foodName, setFoodName] = useState("");
     const [description, setDescription] = useState("");
     const [quantity, setQuantity] = useState("");
     const [location, setLocation] = useState("");
+    const [listingCoords, setListingCoords] = useState({ lat: null, lng: null });
+    const [locatingDonor, setLocatingDonor] = useState(false);
     const [pickupDeadline, setPickupDeadline] = useState("");
     const [safetyDetails, setSafetyDetails] = useState("");
     const [posting, setPosting] = useState(false);
@@ -145,10 +160,12 @@ function App() {
     const [statusFilter, setStatusFilter] = useState("ALL");
     const [copiedCodeKey, setCopiedCodeKey] = useState(null);
 
-    // VOLUNTEER
+    // VOLUNTEER & GPS TRACKING
     const [tasks, setTasks] = useState([]);
     const [taskMessage, setTaskMessage] = useState("");
     const [handoverCodes, setHandoverCodes] = useState({});
+    const [isOnline, setIsOnline] = useState(false);
+    const [togglingOnline, setTogglingOnline] = useState(false);
 
     // DONOR / NGO VERIFICATION CODES
     const [donorTasks, setDonorTasks] = useState([]);
@@ -180,6 +197,115 @@ function App() {
         }, 1000);
         return () => window.clearInterval(timer);
     }, [resendCooldown]);
+
+    // LOAD PROFILE TO RESTORE ONLINE STATUS
+    useEffect(() => {
+        if (!user) return;
+        if (user.role === "VOLUNTEER") {
+            authFetch(`${API}/users/${user.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && typeof data.online === "boolean") {
+                        setIsOnline(data.online);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [user]);
+
+    // LIVE DRIVING LOCATION BROADCAST FOR VOLUNTEER
+    useEffect(() => {
+        if (!user || user.role !== "VOLUNTEER" || !tasks.length) return;
+
+        const activeTask = tasks.find(t => t.status === "ASSIGNED" || t.status === "COLLECTED");
+        if (!activeTask || !navigator.geolocation) return;
+
+        const watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const { latitude, longitude } = pos.coords;
+                authFetch(`${API}/tasks/${activeTask.id}/location`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ latitude, longitude }),
+                }).catch(() => {});
+            },
+            () => {},
+            { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        );
+
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, [user, tasks]);
+
+    // DONOR LIVE GPS AUTO-DETECT
+    const handleGetDonorLocation = () => {
+        if (!navigator.geolocation) {
+            setMsg("Geolocation is not supported by your browser.");
+            return;
+        }
+
+        setLocatingDonor(true);
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                setListingCoords({ lat, lng });
+
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const data = await res.json();
+                    const road = data.address?.road || data.address?.suburb || data.address?.neighbourhood || "";
+                    const city = data.address?.city || data.address?.town || data.address?.county || "";
+                    const formatted = road ? `${road}, ${city}` : (data.display_name?.slice(0, 50) || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                    setLocation(formatted);
+                } catch {
+                    setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                } finally {
+                    setLocatingDonor(false);
+                }
+            },
+            (err) => {
+                setLocatingDonor(false);
+                setMsg("Could not retrieve GPS location: " + err.message);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
+
+    // VOLUNTEER ONLINE/OFFLINE TOGGLE
+    const toggleOnlineStatus = async () => {
+        setTogglingOnline(true);
+        const nextStatus = !isOnline;
+
+        const updateStatusOnServer = async (lat = null, lng = null) => {
+            try {
+                const res = await authFetch(`${API}/users/online-status`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ online: nextStatus, latitude: lat, longitude: lng }),
+                });
+                if (res.ok) {
+                    setIsOnline(nextStatus);
+                    setTaskMessage(nextStatus ? "You are now ONLINE and ready for pickups!" : "You are OFFLINE.");
+                } else {
+                    setTaskMessage("Could not update status.");
+                }
+            } catch {
+                setTaskMessage("Failed to update status on server.");
+            } finally {
+                setTogglingOnline(false);
+            }
+        };
+
+        if (nextStatus && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => updateStatusOnServer(pos.coords.latitude, pos.coords.longitude),
+                () => updateStatusOnServer(null, null),
+                { enableHighAccuracy: true }
+            );
+        } else {
+            await updateStatusOnServer(null, null);
+        }
+    };
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -289,12 +415,10 @@ function App() {
                 throw new Error(err);
             }
 
-            // Successfully verified! Update user in local state
             setUser((prev) => ({ ...prev, ngoVerified: true }));
             setActiveModal(null);
             setNgoVerifyMsg("");
 
-            // If user clicked claim on a listing, auto-trigger claim
             if (pendingClaimListingId) {
                 await executeClaim(pendingClaimListingId);
                 setPendingClaimListingId(null);
@@ -639,6 +763,7 @@ function App() {
                 body: JSON.stringify({
                     name: signupName.trim(),
                     email: signupEmail.trim(),
+                    phone: signupPhone.trim(),
                     password: signupPassword,
                     role: signupRole,
                 }),
@@ -669,6 +794,7 @@ function App() {
             setPassword("");
             setSignupName("");
             setSignupEmail("");
+            setSignupPhone("");
             setSignupPassword("");
             setSignupConfirmPassword("");
             setSignupRole("DONOR");
@@ -796,9 +922,9 @@ function App() {
         setHandoverCodes({});
         setPickupCodes({});
         setDeliveryCodes({});
+        setIsOnline(false);
     };
 
-    // DONOR - POST FOOD
     const getDeadlineBounds = () => {
         const now = new Date();
         const minimum = new Date(now.getTime() + 30 * 60 * 1000);
@@ -839,6 +965,8 @@ function App() {
                     description,
                     quantity: Number(quantity),
                     location,
+                    latitude: listingCoords.lat,
+                    longitude: listingCoords.lng,
                     pickupDeadline,
                     safetyDetails,
                     donorId: user.id,
@@ -851,9 +979,10 @@ function App() {
             setDescription("");
             setQuantity("");
             setLocation("");
+            setListingCoords({ lat: null, lng: null });
             setPickupDeadline("");
             setSafetyDetails("");
-            setMsg("Food listing posted successfully.");
+            setMsg("Food listing posted successfully with GPS coordinates.");
             await loadListings();
         } catch {
             setMsg("Could not post food listing.");
@@ -862,14 +991,12 @@ function App() {
         }
     };
 
-    // NGO - CLAIM (WITH MODAL INTERCEPT IF UNVERIFIED)
     const handleClaimClick = (listingId) => {
         if (!user || user.role !== "NGO") {
             setMsg("Only an NGO user can claim a listing.");
             return;
         }
 
-        // If NGO is not verified yet, open the verification modal smoothly
         if (!user.ngoVerified) {
             setPendingClaimListingId(listingId);
             setActiveModal("ngo-verify");
@@ -919,7 +1046,6 @@ function App() {
         return volunteers.find((volunteer) => Number(volunteer.id) === Number(volunteerId));
     };
 
-    // NGO - ASSIGN VOLUNTEER
     const assignVolunteer = async (listingId) => {
         const volunteerId = selectedVolunteers[listingId];
 
@@ -972,7 +1098,6 @@ function App() {
         }));
     };
 
-    // VOLUNTEER - COLLECT
     const collectTask = async (taskId) => {
         const code = handoverCodes[taskId];
 
@@ -1004,7 +1129,6 @@ function App() {
         }
     };
 
-    // VOLUNTEER - DELIVER
     const deliverTask = async (taskId) => {
         const code = handoverCodes[taskId];
 
@@ -1058,7 +1182,6 @@ function App() {
         return listing && Number(listing.donorId) === Number(user?.id);
     });
 
-    // COMPUTED ANALYTICS / METRICS (FIXED BASE-10 INTEGER ADDITION - NO MORE 909)
     const stats = useMemo(() => {
         let totalMeals = 0;
         for (const item of listings) {
@@ -1080,7 +1203,6 @@ function App() {
         return { totalMeals, deliveredCount, activeRescues };
     }, [listings, donorTasks, ngoTasks, tasks]);
 
-    // FILTERED LISTINGS
     const filteredListings = useMemo(() => {
         return listings.filter((listing) => {
             const matchesSearch =
@@ -1102,7 +1224,6 @@ function App() {
         });
     }, [listings, searchTerm, statusFilter, donorTasks, ngoTasks, tasks]);
 
-    // ROLE-SPECIFIC RESCUE HISTORY LOG
     const userHistory = useMemo(() => {
         if (!user) return [];
         if (user.role === "DONOR") {
@@ -1155,7 +1276,7 @@ function App() {
         if (!deadlineStr) return null;
         const diffMs = new Date(deadlineStr).getTime() - Date.now();
         const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffMs <= 0) return <span className="urgency-badge expired">⚠️️ Expired</span>;
+        if (diffMs <= 0) return <span className="urgency-badge expired">⚠ Expired</span>;
         if (diffHrs < 3) return <span className="urgency-badge critical">🔥 &lt;3h left</span>;
         if (diffHrs < 12) return <span className="urgency-badge urgent">⏱ {diffHrs}h left</span>;
         return <span className="urgency-badge calm">⏱ {diffHrs}h left</span>;
@@ -1184,6 +1305,20 @@ function App() {
                 </div>
 
                 <div className="header-actions">
+                    {/* SWIGGY/ZOMATO VOLUNTEER ONLINE/OFFLINE TOGGLE */}
+                    {user?.role === "VOLUNTEER" && (
+                        <button
+                            type="button"
+                            className={`duty-toggle-btn ${isOnline ? "online" : "offline"}`}
+                            onClick={toggleOnlineStatus}
+                            disabled={togglingOnline}
+                            title="Toggle your availability for NGO task assignment"
+                        >
+                            <span className="duty-dot"></span>
+                            {togglingOnline ? "Updating..." : isOnline ? "Online (On Duty)" : "Offline (Off Duty)"}
+                        </button>
+                    )}
+
                     <button
                         type="button"
                         className="theme-toggle"
@@ -1386,7 +1521,7 @@ function App() {
                                                     <span className={`status-pill status-${String(item.status).toLowerCase()}`}>
                                                         {item.status}
                                                     </span>
-                                                    <small>{new Date(item.time).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small>
+                                                    <small>{formatISTTime(item.time)}</small>
                                                 </div>
                                             </div>
                                         ))}
@@ -1660,6 +1795,15 @@ function App() {
                                     required
                                 />
 
+                                <label>Phone number (for delivery coordination)</label>
+                                <input
+                                    type="tel"
+                                    value={signupPhone}
+                                    onChange={(event) => setSignupPhone(event.target.value)}
+                                    placeholder="Example: 9876543210"
+                                    required
+                                />
+
                                 <label>Password</label>
                                 <input
                                     type="password"
@@ -1688,7 +1832,7 @@ function App() {
                                 >
                                     <option value="DONOR">Donor</option>
                                     <option value="NGO">NGO</option>
-                                    <option value="VOLUNTEER">Volunteer</option>
+                                    <option value="VOLUNTEER">Volunteer (Delivery Partner)</option>
                                 </select>
 
                                 <button className="primary submit-large" type="submit" disabled={signupLoading}>
@@ -1814,13 +1958,28 @@ function App() {
 
                                         <div className="form-split">
                                             <div>
-                                                <label>Pickup location</label>
+                                                <div className="label-with-action">
+                                                    <label>Pickup location</label>
+                                                    <button
+                                                        type="button"
+                                                        className="gps-btn"
+                                                        onClick={handleGetDonorLocation}
+                                                        disabled={locatingDonor}
+                                                    >
+                                                        📍 {locatingDonor ? "Locating..." : "Use Current GPS"}
+                                                    </button>
+                                                </div>
                                                 <input
                                                     value={location}
                                                     onChange={(event) => setLocation(event.target.value)}
-                                                    placeholder="Example: Trichy Main Kitchen"
+                                                    placeholder="Address or click GPS button"
                                                     required
                                                 />
+                                                {listingCoords.lat && (
+                                                    <small className="field-hint gps-active">
+                                                        ✓ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
+                                                    </small>
+                                                )}
                                             </div>
                                             <div>
                                                 <label>Pickup deadline</label>
@@ -1892,6 +2051,20 @@ function App() {
                                                             <div>Listing #{task.listingId}</div>
                                                         </div>
 
+                                                        {/* SWIGGY/ZOMATO VOLUNTEER CONTACT ON DONOR CARD */}
+                                                        {task.volunteerName && (
+                                                            <div className="delivery-contact-banner">
+                                                                <div>
+                                                                    <strong>🚴 Assigned Driver:</strong> {task.volunteerName}
+                                                                </div>
+                                                                {task.volunteerPhone && (
+                                                                    <a href={`tel:${task.volunteerPhone}`} className="call-btn">
+                                                                        📞 Call Driver ({task.volunteerPhone})
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        )}
+
                                                         <div className="verification-box pickup-box">
                                                             <div>
                                                                 <strong>Pickup Handover Code</strong>
@@ -1931,22 +2104,30 @@ function App() {
                                     </div>
                                 </div>
 
-                                <p>Claim available surplus listings and assign verified volunteers for collection.</p>
+                                <p>Claim available surplus listings and assign online volunteers for immediate collection.</p>
 
-                                <h3>Available Registered Volunteers</h3>
+                                <h3>Active Online Volunteers</h3>
 
                                 {volunteers.length === 0 ? (
-                                    <p className="empty-sub">No volunteers registered yet.</p>
+                                    <p className="empty-sub">No volunteers are currently online/available. Volunteers will appear here as soon as they switch to "Online (On Duty)".</p>
                                 ) : (
                                     <div className="grid">
                                         {volunteers.map((volunteer) => (
                                             <article key={volunteer.id} className="volunteer-card">
                                                 <div className="avatar-chip mini">{volunteer.name.charAt(0)}</div>
                                                 <div>
-                                                    <h3>{volunteer.name}</h3>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                        <h3>{volunteer.name}</h3>
+                                                        <span className="online-tag">● ONLINE</span>
+                                                    </div>
                                                     <div className="details mini-details">
                                                         <div>ID: #{volunteer.id}</div>
                                                         <div>{volunteer.email}</div>
+                                                        {volunteer.phone && (
+                                                            <div>
+                                                                📞 <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
+                                                            </div>
+                                                        )}
                                                         <div className={`verified-state ${volunteer.verified ? "yes" : "no"}`}>
                                                             {volunteer.verified ? "Verified Volunteer ✓" : "Pending Verification"}
                                                         </div>
@@ -1959,7 +2140,7 @@ function App() {
 
                                 {ngoTasks.length > 0 && (
                                     <div className="task-code-list">
-                                        <h3>NGO Delivery Codes</h3>
+                                        <h3>Active Rescue Tasks & Delivery Codes</h3>
 
                                         <div className="grid">
                                             {ngoTasks
@@ -1984,9 +2165,34 @@ function App() {
                                                             </div>
 
                                                             <div className="details">
-                                                                <div>Volunteer: <b>{assignedVolunteer ? assignedVolunteer.name : task.volunteerId}</b></div>
+                                                                <div>Volunteer: <b>{task.volunteerName || assignedVolunteer?.name || `ID #${task.volunteerId}`}</b></div>
+                                                                {task.volunteerPhone && (
+                                                                    <div>
+                                                                        📞 Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
+                                                                    </div>
+                                                                )}
+                                                                {task.donorPhone && (
+                                                                    <div>
+                                                                        📞 Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
+                                                                    </div>
+                                                                )}
                                                                 <div>Task #{task.id}</div>
                                                             </div>
+
+                                                            {/* DRIVING LOCATION TELEMETRY */}
+                                                            {task.volunteerLatitude && task.volunteerLongitude && (
+                                                                <div className="driver-loc-card">
+                                                                    <span>📍 Volunteer Live Driving GPS:</span>
+                                                                    <a
+                                                                        href={`https://www.google.com/maps?q=${task.volunteerLatitude},${task.volunteerLongitude}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="map-link-btn"
+                                                                    >
+                                                                        View Driver Live on Maps ↗
+                                                                    </a>
+                                                                </div>
+                                                            )}
 
                                                             <div className="verification-box delivery-box">
                                                                 <div>
@@ -2030,7 +2236,7 @@ function App() {
                                 {taskMessage && <div className="msg">{taskMessage}</div>}
 
                                 {tasks.length === 0 ? (
-                                    <p className="empty-sub">No pickup tasks currently assigned to you.</p>
+                                    <p className="empty-sub">No pickup tasks currently assigned to you. Make sure your status above is set to <b>Online</b> so NGOs can assign rescues to you.</p>
                                 ) : (
                                     <div className="grid">
                                         {tasks.map((task) => (
@@ -2044,8 +2250,49 @@ function App() {
 
                                                 <div className="details">
                                                     <div>Listing ID: <b>#{task.listingId}</b></div>
-                                                    <div>Collected at: <b>{task.collectedAt ? new Date(task.collectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Pending"}</b></div>
-                                                    <div>Delivered at: <b>{task.deliveredAt ? new Date(task.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Pending"}</b></div>
+                                                    <div>Collected at: <b>{formatISTTime(task.collectedAt)}</b></div>
+                                                    <div>Delivered at: <b>{formatISTTime(task.deliveredAt)}</b></div>
+                                                </div>
+
+                                                {/* SWIGGY/ZOMATO CONTACT & NAVIGATION COMPONENT */}
+                                                <div className="delivery-ops-panel">
+                                                    {task.donorPhone && (
+                                                        <div className="contact-row">
+                                                            <span>📞 Donor:</span>
+                                                            <a href={`tel:${task.donorPhone}`} className="call-btn-small">
+                                                                Call Donor ({task.donorPhone})
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                    {task.ngoPhone && (
+                                                        <div className="contact-row">
+                                                            <span>🏢 NGO Hub:</span>
+                                                            <a href={`tel:${task.ngoPhone}`} className="call-btn-small">
+                                                                Call NGO ({task.ngoPhone})
+                                                            </a>
+                                                        </div>
+                                                    )}
+
+                                                    {/* TURN-BY-TURN DRIVING LINK */}
+                                                    {task.pickupLatitude && task.pickupLongitude ? (
+                                                        <a
+                                                            href={`https://www.google.com/maps/dir/?api=1&destination=${task.pickupLatitude},${task.pickupLongitude}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="nav-btn-gmaps"
+                                                        >
+                                                            🗺️ Open Google Maps Driving Directions
+                                                        </a>
+                                                    ) : task.pickupAddress ? (
+                                                        <a
+                                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.pickupAddress)}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="nav-btn-gmaps"
+                                                        >
+                                                            🗺️ Search Pickup Address in Maps
+                                                        </a>
+                                                    ) : null}
                                                 </div>
 
                                                 {task.status === "ASSIGNED" && (
@@ -2188,11 +2435,22 @@ function App() {
                                                 </div>
                                                 <div>
                                                     <span>📍</span> {listing.location}
+                                                    {listing.latitude && (
+                                                        <span className="gps-verified-tag">GPS ✓</span>
+                                                    )}
                                                 </div>
                                                 <div>
-                                                    <span>⏰</span> Deadline: {new Date(listing.pickupDeadline).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                                    <span>⏰</span> Deadline: {formatISTTime(listing.pickupDeadline)}
                                                 </div>
                                             </div>
+
+                                            {/* DONOR PICKUP CODE BADGE */}
+                                            {isOwnDonorListing && listing.pickupCode && (
+                                                <div className="donor-code-pill">
+                                                    <span>Donor Pickup Code:</span>
+                                                    <strong>{listing.pickupCode}</strong>
+                                                </div>
+                                            )}
 
                                             {isCompleted && (
                                                 <div className="impact-seal" role="status" aria-label="Food successfully delivered">
@@ -2253,14 +2511,14 @@ function App() {
                                                     </div>
                                                 ) : (
                                                     <div className="assignment-box">
-                                                        <h4>Assign Field Volunteer</h4>
+                                                        <h4>Assign Online Field Volunteer</h4>
                                                         <select
                                                             value={selectedVolunteers[listing.id] || ""}
                                                             onChange={(event) =>
                                                                 selectVolunteer(listing.id, event.target.value)
                                                             }
                                                         >
-                                                            <option value="">Select a volunteer</option>
+                                                            <option value="">Select an available volunteer</option>
                                                             {volunteers.map((volunteer) => (
                                                                 <option key={volunteer.id} value={volunteer.id}>
                                                                     {volunteer.name} (ID #{volunteer.id})
@@ -2270,7 +2528,7 @@ function App() {
                                                         <button
                                                             className="primary submit-large"
                                                             onClick={() => assignVolunteer(listing.id)}
-                                                            disabled={assigningListing === listing.id}
+                                                            disabled={assigningListing === listing.id || !volunteers.length}
                                                         >
                                                             {assigningListing === listing.id ? "Assigning..." : "Assign Volunteer"}
                                                         </button>
