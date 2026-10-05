@@ -24,7 +24,10 @@ this.frontendUrl = frontendUrl;
 }
 
 public void sendVerificationEmail(String recipientEmail, String recipientName, String verificationCode) {
-log.info("Sending OTP verification to {}", recipientEmail);
+System.out.println("==================================================================");
+System.out.println(">>> VERIFICATION OTP FOR: " + recipientEmail);
+System.out.println(">>> CODE: " + verificationCode);
+System.out.println("==================================================================");
 
 try {
 CreateEmailOptions params = CreateEmailOptions.builder()
@@ -40,12 +43,17 @@ CreateEmailOptions params = CreateEmailOptions.builder()
 CreateEmailResponse response = resend.emails().send(params);
 log.info("OTP email delivered successfully! Resend ID: {}", response.getId());
 } catch (Exception e) {
-log.error("Failed to deliver email via Resend API: {}", e.getMessage(), e);
+log.error("Resend API rejected delivery (sandbox restriction): {}. OTP was printed above.", e.getMessage());
 }
 }
 
 public void sendPasswordResetEmail(String recipientEmail, String recipientName, String resetToken) {
 String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
+
+System.out.println("==================================================================");
+System.out.println(">>> PASSWORD RESET LINK FOR: " + recipientEmail);
+System.out.println(">>> LINK: " + resetLink);
+System.out.println("==================================================================");
 
 try {
 CreateEmailOptions params = CreateEmailOptions.builder()
@@ -61,7 +69,7 @@ CreateEmailOptions params = CreateEmailOptions.builder()
 resend.emails().send(params);
 log.info("Password reset email sent to {}", recipientEmail);
 } catch (Exception e) {
-log.error("Failed to send password reset: {}", e.getMessage(), e);
+log.error("Failed to send password reset: {}. Link was printed above.", e.getMessage());
 }
 }
 }
