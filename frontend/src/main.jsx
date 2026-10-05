@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
@@ -322,21 +322,466 @@ function App() {
 
             fetch(`${API}/users/validate-reset-token?token=${encodeURIComponent(token)}`)
                 .then(async (response) => {
-                                if (!response.ok) {
-                let errorMessage = "Could not create account.";
-                try {
-                    const text = await response.text();
-                    try {
-                        const errorData = JSON.parse(text);
-                        errorMessage = errorData.message || errorData.error || errorMessage;
-                    } catch {
-                        if (text) errorMessage = text;
+                    if (!response.ok) {
+                        let message = "This password reset link is invalid or expired.";
+                        try {
+                            const data = await response.json();
+                            message = data.error || data.message || message;
+                        } catch {}
+                        throw new Error(message);
                     }
+                })
+                .catch((error) => {
+                    setResetPasswordMessage(error.message || "This password reset link is invalid or expired.");
+                })
+                .finally(() => setResetTokenChecking(false));
+        }
+    }, []);
+
+    const clearResetRoute = () => {
+        if (window.location.pathname === "/reset-password") {
+            window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+        }
+    };
+
+    const copyCode = (code, key) => {
+        if (!code || code === "Loading..." || code === "Unavailable") return;
+        navigator.clipboard.writeText(code).then(() => {
+            setCopiedCodeKey(key);
+            setTimeout(() => setCopiedCodeKey(null), 2000);
+        });
+    };
+
+    const handleAvatarSelect = (emoji) => {
+        setCustomAvatar(emoji);
+        localStorage.setItem("shareplate_avatar", emoji);
+    };
+
+    const handleAvatarUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setCustomAvatar(reader.result);
+                localStorage.setItem("shareplate_avatar", reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleRemoveAvatar = () => {
+        setCustomAvatar("");
+        localStorage.removeItem("shareplate_avatar");
+    };
+
+    const handleChangePasswordSubmit = (e) => {
+        e.preventDefault();
+        setChangePasswordMsg("");
+
+        if (newPasswordVal !== confirmNewPasswordVal) {
+            setChangePasswordMsg("New passwords do not match.");
+            return;
+        }
+
+        if (!isPasswordStrong(newPasswordVal)) {
+            setChangePasswordMsg("Password does not meet the security criteria.");
+            return;
+        }
+
+        setChangePasswordMsg("Password updated successfully.");
+        setOldPassword("");
+        setNewPasswordVal("");
+        setConfirmNewPasswordVal("");
+    };
+
+    const submitNgoVerification = async (e) => {
+        e.preventDefault();
+        setNgoVerifyLoading(true);
+        setNgoVerifyMsg("");
+
+        try {
+            const response = await authFetch(`${API}/users/${user.id}/verify-ngo`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ darpanId, phone: ngoPhone }),
+            });
+
+            if (!response.ok) {
+                let err = "Verification failed. Check your Darpan ID & Phone.";
+                try {
+                    const data = await response.json();
+                    err = data.message || data.error || err;
+                } catch {}
+                throw new Error(err);
+            }
+
+            setUser((prev) => ({ ...prev, ngoVerified: true }));
+            setActiveModal(null);
+            setNgoVerifyMsg("");
+
+            if (pendingClaimListingId) {
+                await executeClaim(pendingClaimListingId);
+                setPendingClaimListingId(null);
+            } else {
+                setMsg("NGO verified successfully! You can now claim surplus food listings.");
+            }
+        } catch (error) {
+            setNgoVerifyMsg(error.message || "Could not complete verification.");
+        } finally {
+            setNgoVerifyLoading(false);
+        }
+    };
+
+    const openForgotPassword = () => {
+        setShowSignup(false);
+        setShowVerification(false);
+        setShowForgotPassword(true);
+        setShowResetPassword(false);
+        setForgotPasswordEmail(email.trim());
+        setForgotPasswordMessage("");
+        setLoginMessage("");
+    };
+
+    const openLogin = () => {
+        setShowSignup(false);
+        setShowVerification(false);
+        setShowForgotPassword(false);
+        setShowResetPassword(false);
+        setSignupMessage("");
+        setForgotPasswordMessage("");
+        setResetPasswordMessage("");
+        setLoginMessage("");
+        clearResetRoute();
+    };
+
+    const requestPasswordReset = async (event) => {
+        event.preventDefault();
+        setForgotPasswordLoading(true);
+        setForgotPasswordMessage("");
+
+        try {
+            const response = await fetch(`${API}/users/forgot-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: forgotPasswordEmail.trim() }),
+            });
+
+            let message = "If an account exists for this email, a password reset link has been sent.";
+            try {
+                const data = await response.json();
+                message = data.message || data.error || message;
+            } catch {}
+
+            if (!response.ok) throw new Error(message);
+            setForgotPasswordMessage(message);
+        } catch (error) {
+            setForgotPasswordMessage(error.message || "Could not process the password reset request.");
+        } finally {
+            setForgotPasswordLoading(false);
+        }
+    };
+
+    const resetPasswordSubmit = async (event) => {
+        event.preventDefault();
+
+        if (resetPassword !== resetConfirmPassword) {
+            setResetPasswordMessage("Passwords do not match.");
+            return;
+        }
+
+        if (!isPasswordStrong(resetPassword)) {
+            setResetPasswordMessage("Please fulfill all password requirements below.");
+            return;
+        }
+
+        setResetPasswordLoading(true);
+        setResetPasswordMessage("");
+
+        try {
+            const response = await fetch(`${API}/users/reset-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    token: resetToken,
+                    newPassword: resetPassword,
+                    confirmPassword: resetConfirmPassword,
+                }),
+            });
+
+            let message = "Password reset successfully. You can now log in.";
+            try {
+                const data = await response.json();
+                message = data.message || data.error || message;
+            } catch {}
+
+            if (!response.ok) throw new Error(message);
+
+            setResetPassword("");
+            setResetConfirmPassword("");
+            setEmail("");
+            setPassword("");
+            setResetPasswordMessage("");
+            clearResetRoute();
+            setShowResetPassword(false);
+            setLoginMessage("Password reset successfully. You can now sign in.");
+        } catch (error) {
+            setResetPasswordMessage(error.message || "Could not reset your password.");
+        } finally {
+            setResetPasswordLoading(false);
+        }
+    };
+
+    const loadListings = async () => {
+        try {
+            const response = await authFetch(`${API}/listings`);
+            if (!response.ok) throw new Error();
+            const data = await response.json();
+            setListings(data);
+        } catch {
+            setMsg("Start the Spring Boot backend first.");
+        }
+    };
+
+    const loadTasks = async (volunteerId) => {
+        try {
+            const response = await authFetch(`${API}/tasks/volunteer/${volunteerId}`);
+            if (!response.ok) throw new Error();
+            const data = await response.json();
+            setTasks(data);
+        } catch {
+            setTaskMessage("Could not load your pickup tasks.");
+        }
+    };
+
+    const loadAllTasksForDonor = async () => {
+        try {
+            const response = await authFetch(`${API}/tasks`);
+            if (!response.ok) throw new Error();
+            const data = await response.json();
+            setDonorTasks(data);
+        } catch {
+            setMsg("Could not load your pickup assignments.");
+        }
+    };
+
+    const loadVolunteers = async () => {
+        try {
+            const response = await authFetch(`${API}/users/volunteers`);
+            if (!response.ok) throw new Error();
+            const data = await response.json();
+            setVolunteers(data);
+        } catch {
+            setMsg("Could not load volunteers.");
+        }
+    };
+
+    const loadNgoTasks = async () => {
+        try {
+            const response = await authFetch(`${API}/tasks`);
+            if (!response.ok) throw new Error();
+            const data = await response.json();
+            setNgoTasks(data);
+        } catch {
+            setMsg("Could not load pickup assignments.");
+        }
+    };
+
+    useEffect(() => {
+        if (user) loadListings();
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) {
+            setTasks([]);
+            setDonorTasks([]);
+            setVolunteers([]);
+            setNgoTasks([]);
+            return;
+        }
+
+        if (user.role === "VOLUNTEER") loadTasks(user.id);
+        if (user.role === "DONOR") loadAllTasksForDonor();
+        if (user.role === "NGO") {
+            loadVolunteers();
+            loadNgoTasks();
+        }
+    }, [user]);
+
+    // DONOR: load pickup codes
+    useEffect(() => {
+        if (user?.role !== "DONOR") {
+            setPickupCodes({});
+            return;
+        }
+
+        const ownListingIds = new Set(
+            listings
+                .filter((listing) => Number(listing.donorId) === Number(user.id))
+                .map((listing) => Number(listing.id))
+        );
+
+        const relevantTasks = donorTasks.filter((task) =>
+            ownListingIds.has(Number(task.listingId))
+        );
+
+        const fetchCodes = async () => {
+            for (const task of relevantTasks) {
+                if (pickupCodes[task.id]) continue;
+
+                try {
+                    setCodeLoading((previous) => ({
+                        ...previous,
+                        [`pickup-${task.id}`]: true,
+                    }));
+
+                    const response = await authFetch(`${API}/tasks/${task.id}/pickup-code`);
+                    if (!response.ok) continue;
+
+                    const data = await response.json();
+                    setPickupCodes((previous) => ({
+                        ...previous,
+                        [task.id]: data.code,
+                    }));
+                } catch {
+                } finally {
+                    setCodeLoading((previous) => ({
+                        ...previous,
+                        [`pickup-${task.id}`]: false,
+                    }));
+                }
+            }
+        };
+
+        if (relevantTasks.length > 0) fetchCodes();
+    }, [user, listings, donorTasks]);
+
+    // NGO: load delivery codes
+    useEffect(() => {
+        if (user?.role !== "NGO") {
+            setDeliveryCodes({});
+            return;
+        }
+
+        const relevantTasks = ngoTasks.filter((task) => {
+            const listing = listings.find((item) => Number(item.id) === Number(task.listingId));
+            return listing && Number(listing.claimedByNgoId) === Number(user.id);
+        });
+
+        const fetchCodes = async () => {
+            for (const task of relevantTasks) {
+                if (deliveryCodes[task.id]) continue;
+
+                try {
+                    setCodeLoading((previous) => ({
+                        ...previous,
+                        [`delivery-${task.id}`]: true,
+                    }));
+
+                    const response = await authFetch(`${API}/tasks/${task.id}/delivery-code`);
+                    if (!response.ok) continue;
+
+                    const data = await response.json();
+                    setDeliveryCodes((previous) => ({
+                        ...previous,
+                        [task.id]: data.code,
+                    }));
+                } catch {
+                } finally {
+                    setCodeLoading((previous) => ({
+                        ...previous,
+                        [`delivery-${task.id}`]: false,
+                    }));
+                }
+            }
+        };
+
+        if (relevantTasks.length > 0) fetchCodes();
+    }, [user, listings, ngoTasks]);
+
+    // LOGIN
+    const login = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setLoginMessage("");
+
+        try {
+            const response = await fetch(`${API}/users/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+
+            if (!response.ok) {
+                let errorMessage = "Invalid email or password.";
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorData.message || errorMessage;
                 } catch {}
                 throw new Error(errorMessage);
             }
 
-            const data = await response.json();
+            const authResponse = await response.json();
+            localStorage.setItem("shareplate_token", authResponse.token);
+            setUser(authResponse.user);
+            setPassword("");
+        } catch (error) {
+            const message = error?.message || "";
+            if (message.toLowerCase().includes("verify your email")) {
+                setVerificationEmail(email.trim());
+                setVerificationCode(["", "", "", "", "", ""]);
+                setVerificationMessage("Please verify your email before signing in.");
+                setShowVerification(true);
+            } else {
+                setLoginMessage("Invalid email or password.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // SIGNUP
+    const register = async (event) => {
+        event.preventDefault();
+        setSignupMessage("");
+
+        if (signupPassword !== signupConfirmPassword) {
+            setSignupMessage("Passwords do not match.");
+            return;
+        }
+
+        if (!isPasswordStrong(signupPassword)) {
+            setSignupMessage("Please fulfill all password requirements below.");
+            return;
+        }
+
+        setSignupLoading(true);
+
+        try {
+            const response = await fetch(`${API}/users/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: signupName.trim(),
+                    email: signupEmail.trim(),
+                    phone: signupPhone.trim(),
+                    password: signupPassword,
+                    role: signupRole,
+                }),
+            });
+
+            if (!response.ok) {
+                let errorMessage = "Could not create account.";
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorData.error || errorMessage;
+                } catch {
+                    const errorText = await response.text();
+                    if (errorText) errorMessage = errorText;
+                }
+                throw new Error(errorMessage);
+            }
+
+            await response.json();
 
             const registeredEmail = signupEmail.trim().toLowerCase();
             setVerificationEmail(registeredEmail);
