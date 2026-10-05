@@ -1,10 +1,11 @@
 package com.shareplate.service;
 
+import com.resend.Resend;
+import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.CreateEmailResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,67 +13,55 @@ public class EmailService {
 
 private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-private final JavaMailSender mailSender;
-private final String fromEmail;
+private final Resend resend;
 private final String frontendUrl;
 
-public EmailService(JavaMailSender mailSender, 
-@Value("${shareplate.mail.from:${SHAREPLATE_MAIL_USERNAME:no-reply@shareplate.com}}") String fromEmail,
-@Value("${shareplate.frontend-url:http://localhost:5173}") String frontendUrl) {
-
-this.mailSender = mailSender;
-this.fromEmail = fromEmail;
+public EmailService(
+@Value("${resend.api-key:${RESEND_API_KEY:}}") String apiKey,
+@Value("${shareplate.frontend-url:https://shareplate-green.vercel.app}") String frontendUrl) {
+this.resend = new Resend(apiKey);
 this.frontendUrl = frontendUrl;
 }
 
 public void sendVerificationEmail(String recipientEmail, String recipientName, String verificationCode) {
-System.out.println("==================================================================");
-System.out.println(">>> VERIFICATION OTP FOR: " + recipientEmail);
-System.out.println(">>> CODE: " + verificationCode);
-System.out.println("==================================================================");
+log.info("Sending OTP verification to {}", recipientEmail);
 
 try {
-SimpleMailMessage message = new SimpleMailMessage();
-message.setFrom(fromEmail);
-message.setTo(recipientEmail);
-message.setSubject("SharePlate - Verify your email");
+CreateEmailOptions params = CreateEmailOptions.builder()
+.from("SharePlate <onboarding@resend.dev>")
+.to(recipientEmail)
+.subject("SharePlate - Verify your email")
+.html("<p>Hi <strong>" + recipientName + "</strong>,</p>"
++ "<p>Welcome to SharePlate! Your email verification code is:</p>"
++ "<h2 style='letter-spacing: 4px; color: #16a34a;'>" + verificationCode + "</h2>"
++ "<p>This code is valid for 10 minutes.</p>")
+.build();
 
-message.setText("Hi " + recipientName + ",\n\n" + "Welcome to SharePlate!\n\n"
-+ "Your email verification code is:\n\n" + verificationCode + "\n\n"
-+ "This code is valid for 10 minutes.\n\n" + "If you did not create a SharePlate account, "
-+ "you can safely ignore this email.\n\n" + "Regards,\n" + "SharePlate Team");
-
-mailSender.send(message);
-log.info("Verification email sent successfully to {}", recipientEmail);
+CreateEmailResponse response = resend.emails().send(params);
+log.info("OTP email delivered successfully! Resend ID: {}", response.getId());
 } catch (Exception e) {
-log.error("SMTP delivery failed for {}: {}. OTP printed above for testing.", recipientEmail, e.getMessage());
+log.error("Failed to deliver email via Resend API: {}", e.getMessage(), e);
 }
 }
 
 public void sendPasswordResetEmail(String recipientEmail, String recipientName, String resetToken) {
 String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
 
-System.out.println("==================================================================");
-System.out.println(">>> PASSWORD RESET LINK FOR: " + recipientEmail);
-System.out.println(">>> LINK: " + resetLink);
-System.out.println("==================================================================");
-
 try {
-SimpleMailMessage message = new SimpleMailMessage();
-message.setFrom(fromEmail);
-message.setTo(recipientEmail);
-message.setSubject("SharePlate - Reset your password");
+CreateEmailOptions params = CreateEmailOptions.builder()
+.from("SharePlate <onboarding@resend.dev>")
+.to(recipientEmail)
+.subject("SharePlate - Reset your password")
+.html("<p>Hi <strong>" + recipientName + "</strong>,</p>"
++ "<p>Click the link below to reset your password:</p>"
++ "<p><a href='" + resetLink + "'>Reset Password</a></p>"
++ "<p>This link expires in 30 minutes.</p>")
+.build();
 
-message.setText("Hi " + recipientName + ",\n\n" + "We received a request to reset your SharePlate password.\n\n"
-+ "Use the link below to create a new password:\n\n" + resetLink + "\n\n"
-+ "This password reset link is valid for 30 minutes and can only be used once.\n\n"
-+ "If you did not request a password reset, you can safely ignore this email.\n\n"
-+ "Regards,\n" + "SharePlate Team");
-
-mailSender.send(message);
-log.info("Password reset email sent successfully to {}", recipientEmail);
+resend.emails().send(params);
+log.info("Password reset email sent to {}", recipientEmail);
 } catch (Exception e) {
-log.error("SMTP delivery failed for {}: {}. Link printed above for testing.", recipientEmail, e.getMessage());
+log.error("Failed to send password reset: {}", e.getMessage(), e);
 }
 }
 }
