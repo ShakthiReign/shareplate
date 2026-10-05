@@ -1,74 +1,44 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { createRoot } from "react-dom/client";
+import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom/client";
 import "./style.css";
 
-const API = (import.meta.env.VITE_API_URL || "https://shareplate-swa2.onrender.com/api").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL || "https://shareplate-backend.onrender.com/api";
 
-const authFetch = async (url, options = {}) => {
-    const token = localStorage.getItem("shareplate_token");
-    const headers = {
-        ...(options.headers || {}),
-    };
-
-    if (token) {
-        headers.Authorization = `Bearer ${token}`;
-    }
-
-    return fetch(url, {
-        ...options,
-        headers,
-    });
-};
-
-const formatISTTime = (isoString) => {
-    if (!isoString) return "Pending";
-    const normalized = (isoString.includes("Z") || isoString.includes("+")) ? isoString : `${isoString}Z`;
-    const date = new Date(normalized);
-    if (isNaN(date.getTime())) return isoString;
-    return date.toLocaleTimeString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-    });
-};
-
-const checkPasswordRules = (pwd) => {
-    const value = pwd || "";
+function checkPasswordRules(pw) {
     return {
-        length: value.length >= 8 && value.length <= 72,
-        upper: /[A-Z]/.test(value),
-        lower: /[a-z]/.test(value),
-        digit: /\d/.test(value),
-        special: /[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~]/.test(value),
+        length: pw.length >= 8 && pw.length <= 72,
+        upper: /[A-Z]/.test(pw),
+        lower: /[a-z]/.test(pw),
+        digit: /[0-9]/.test(pw),
+        special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw),
     };
-};
+}
 
-const isPasswordStrong = (pwd) => {
-    const rules = checkPasswordRules(pwd);
+function isPasswordStrong(pw) {
+    const rules = checkPasswordRules(pw);
     return rules.length && rules.upper && rules.lower && rules.digit && rules.special;
-};
+}
 
 function PasswordRequirements({ password }) {
     const rules = checkPasswordRules(password);
     return (
         <div className="password-checklist">
-            <span className="checklist-title">Password must contain:</span>
+            <span className="checklist-title">PASSWORD MUST CONTAIN:</span>
             <ul>
                 <li className={rules.length ? "valid" : ""}>
-                    <i>{rules.length ? "✓" : ""}</i> 8 to 72 characters
+                    <i className="check-icon">{rules.length ? "\u2713" : ""}</i> 8 to 72 characters
                 </li>
                 <li className={rules.upper ? "valid" : ""}>
-                    <i>{rules.upper ? "✓" : ""}</i> At least 1 uppercase letter (A-Z)
+                    <i className="check-icon">{rules.upper ? "\u2713" : ""}</i> At least 1 uppercase letter (A-Z)
                 </li>
                 <li className={rules.lower ? "valid" : ""}>
-                    <i>{rules.lower ? "✓" : ""}</i> At least 1 lowercase letter (a-z)
+                    <i className="check-icon">{rules.lower ? "\u2713" : ""}</i> At least 1 lowercase letter (a-z)
                 </li>
                 <li className={rules.digit ? "valid" : ""}>
-                    <i>{rules.digit ? "✓" : ""}</i> At least 1 digit (0-9)
+                    <i className="check-icon">{rules.digit ? "\u2713" : ""}</i> At least 1 digit (0-9)
                 </li>
                 <li className={rules.special ? "valid" : ""}>
-                    <i>{rules.special ? "✓" : ""}</i> At least 1 special character (!@#$%...)
+                    <i className="check-icon">{rules.special ? "\u2713" : ""}</i> At least 1 special character (!@#$%...)
                 </li>
             </ul>
         </div>
@@ -76,40 +46,28 @@ function PasswordRequirements({ password }) {
 }
 
 function App() {
-    const [user, setUser] = useState(null);
+    const [token, setToken] = useState(localStorage.getItem("token") || "");
+    const [user, setUser] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem("user") || "null");
+        } catch {
+            return null;
+        }
+    });
 
-    // HAMBURGER / MODAL STATES
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [activeModal, setActiveModal] = useState(null);
+    const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [showAdminModal, setShowAdminModal] = useState(false);
 
-    // NGO VERIFICATION FORM
-    const [darpanId, setDarpanId] = useState("");
-    const [ngoPhone, setNgoPhone] = useState("");
-    const [ngoVerifyLoading, setNgoVerifyLoading] = useState(false);
-    const [ngoVerifyMsg, setNgoVerifyMsg] = useState("");
-    const [pendingClaimListingId, setPendingClaimListingId] = useState(null);
-
-    // PROFILE MANAGEMENT
-    const [customAvatar, setCustomAvatar] = useState(() => localStorage.getItem("shareplate_avatar") || "");
-    const [oldPassword, setOldPassword] = useState("");
-    const [newPasswordVal, setNewPasswordVal] = useState("");
-    const [confirmNewPasswordVal, setConfirmNewPasswordVal] = useState("");
-    const [changePasswordMsg, setChangePasswordMsg] = useState("");
-
-    // LOGIN
+    // Auth input states
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loginMessage, setLoginMessage] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [loginLoading, setLoginLoading] = useState(false);
 
-    // THEME
-    const [theme, setTheme] = useState(() => {
-        const saved = localStorage.getItem("shareplate_theme");
-        if (saved === "light" || saved === "dark") return saved;
-        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    });
-
-    // SIGNUP
+    // Signup states
     const [showSignup, setShowSignup] = useState(false);
     const [signupName, setSignupName] = useState("");
     const [signupEmail, setSignupEmail] = useState("");
@@ -120,628 +78,117 @@ function App() {
     const [signupMessage, setSignupMessage] = useState("");
     const [signupLoading, setSignupLoading] = useState(false);
 
-    // EMAIL VERIFICATION
+    // Verification states
     const [showVerification, setShowVerification] = useState(false);
     const [verificationEmail, setVerificationEmail] = useState("");
     const [verificationCode, setVerificationCode] = useState(["", "", "", "", "", ""]);
     const [verificationMessage, setVerificationMessage] = useState("");
     const [verificationLoading, setVerificationLoading] = useState(false);
-    const [resendLoading, setResendLoading] = useState(false);
-    const [resendCooldown, setResendCooldown] = useState(0);
 
-    // FORGOT / RESET PASSWORD
+    // Password recovery states
     const [showForgotPassword, setShowForgotPassword] = useState(false);
-    const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
-    const [forgotPasswordMessage, setForgotPasswordMessage] = useState("");
-    const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState("");
+    const [forgotMessage, setForgotMessage] = useState("");
+    const [forgotLoading, setForgotLoading] = useState(false);
+
     const [showResetPassword, setShowResetPassword] = useState(false);
     const [resetToken, setResetToken] = useState("");
-    const [resetPassword, setResetPassword] = useState("");
-    const [resetConfirmPassword, setResetConfirmPassword] = useState("");
-    const [resetPasswordMessage, setResetPasswordMessage] = useState("");
-    const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
-    const [resetTokenChecking, setResetTokenChecking] = useState(false);
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmNewPassword, setConfirmNewPassword] = useState("");
+    const [resetMessage, setResetMessage] = useState("");
+    const [resetLoading, setResetLoading] = useState(false);
 
-    // FOOD LISTINGS & GPS
+    // Operational listings and tasks states
     const [listings, setListings] = useState([]);
-    const [msg, setMsg] = useState("");
-    const [foodName, setFoodName] = useState("");
-    const [description, setDescription] = useState("");
-    const [quantity, setQuantity] = useState("");
-    const [location, setLocation] = useState("");
-    const [listingCoords, setListingCoords] = useState({ lat: null, lng: null });
-    const [locatingDonor, setLocatingDonor] = useState(false);
-    const [pickupDeadline, setPickupDeadline] = useState("");
-    const [safetyDetails, setSafetyDetails] = useState("");
-    const [posting, setPosting] = useState(false);
-
-    // FILTER & SEARCH
-    const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState("ALL");
-    const [copiedCodeKey, setCopiedCodeKey] = useState(null);
-
-    // VOLUNTEER & GPS TRACKING
     const [tasks, setTasks] = useState([]);
-    const [taskMessage, setTaskMessage] = useState("");
-    const [handoverCodes, setHandoverCodes] = useState({});
+    const [availableVolunteers, setAvailableVolunteers] = useState([]);
+    const [selectedVolunteer, setSelectedVolunteer] = useState({});
     const [isOnline, setIsOnline] = useState(false);
-    const [togglingOnline, setTogglingOnline] = useState(false);
+    const [locationStatus, setLocationStatus] = useState("");
+    const [pickupCodeInput, setPickupCodeInput] = useState({});
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterTab, setFilterTab] = useState("ALL");
 
-    // DONOR / NGO VERIFICATION CODES
-    const [donorTasks, setDonorTasks] = useState([]);
-    const [pickupCodes, setPickupCodes] = useState({});
-    const [deliveryCodes, setDeliveryCodes] = useState({});
-    const [codeLoading, setCodeLoading] = useState({});
+    // Donor Food Creation Form State
+    const [foodTitle, setFoodTitle] = useState("");
+    const [foodDescription, setFoodDescription] = useState("");
+    const [foodQuantity, setFoodQuantity] = useState("");
+    const [foodAddress, setFoodAddress] = useState("");
+    const [foodLatitude, setFoodLatitude] = useState(null);
+    const [foodLongitude, setFoodLongitude] = useState(null);
+    const [foodGpsStatus, setFoodGpsStatus] = useState("");
 
-    // NGO
-    const [volunteers, setVolunteers] = useState([]);
-    const [ngoTasks, setNgoTasks] = useState([]);
-    const [selectedVolunteers, setSelectedVolunteers] = useState({});
-    const [assigningListing, setAssigningListing] = useState(null);
+    // Admin NGO Verification State
+    const [pendingNgos, setPendingNgos] = useState([]);
+    const [adminMessage, setAdminMessage] = useState("");
 
-    // GLOBAL THEME APPLICATION
+    // Custom avatar state
+    const [userAvatar, setUserAvatar] = useState(localStorage.getItem("user_avatar") || "");
+
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
-        document.body.setAttribute("data-theme", theme);
-        localStorage.setItem("shareplate_theme", theme);
+        localStorage.setItem("theme", theme);
     }, [theme]);
 
+    useEffect(() => {
+        if (token && user) {
+            fetchListings();
+            if (user.role === "VOLUNTEER") {
+                fetchVolunteerTasks();
+            } else if (user.role === "NGO") {
+                fetchNgoTasks();
+                fetchOnlineVolunteers();
+            } else if (user.role === "ADMIN") {
+                fetchPendingNgos();
+            }
+        }
+    }, [token, user]);
+
+    const authHeaders = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+    };
+
     const toggleTheme = () => {
-        setTheme((current) => (current === "dark" ? "light" : "dark"));
+        setTheme((prev) => (prev === "dark" ? "light" : "dark"));
     };
 
-    useEffect(() => {
-        if (resendCooldown <= 0) return;
-        const timer = window.setInterval(() => {
-            setResendCooldown((current) => Math.max(0, current - 1));
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [resendCooldown]);
-
-    // LOAD PROFILE TO RESTORE ONLINE STATUS
-    useEffect(() => {
-        if (!user) return;
-        if (user.role === "VOLUNTEER") {
-            authFetch(`${API}/users/${user.id}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data && typeof data.online === "boolean") {
-                        setIsOnline(data.online);
-                    }
-                })
-                .catch(() => {});
-        }
-    }, [user]);
-
-    // LIVE DRIVING LOCATION BROADCAST FOR VOLUNTEER
-    useEffect(() => {
-        if (!user || user.role !== "VOLUNTEER" || !tasks.length) return;
-
-        const activeTask = tasks.find(t => t.status === "ASSIGNED" || t.status === "COLLECTED");
-        if (!activeTask || !navigator.geolocation) return;
-
-        const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                const { latitude, longitude } = pos.coords;
-                authFetch(`${API}/tasks/${activeTask.id}/location`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ latitude, longitude }),
-                }).catch(() => {});
-            },
-            () => {},
-            { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-        );
-
-        return () => navigator.geolocation.clearWatch(watchId);
-    }, [user, tasks]);
-
-    // DONOR LIVE GPS AUTO-DETECT
-    const handleGetDonorLocation = () => {
-        if (!navigator.geolocation) {
-            setMsg("Geolocation is not supported by your browser.");
-            return;
-        }
-
-        setLocatingDonor(true);
-        navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                setListingCoords({ lat, lng });
-
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-                    const data = await res.json();
-                    const road = data.address?.road || data.address?.suburb || data.address?.neighbourhood || "";
-                    const city = data.address?.city || data.address?.town || data.address?.county || "";
-                    const formatted = road ? `${road}, ${city}` : (data.display_name?.slice(0, 50) || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                    setLocation(formatted);
-                } catch {
-                    setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                } finally {
-                    setLocatingDonor(false);
-                }
-            },
-            (err) => {
-                setLocatingDonor(false);
-                setMsg("Could not retrieve GPS location: " + err.message);
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    };
-
-    // VOLUNTEER ONLINE/OFFLINE TOGGLE
-    const toggleOnlineStatus = async () => {
-        setTogglingOnline(true);
-        const nextStatus = !isOnline;
-
-        const updateStatusOnServer = async (lat = null, lng = null) => {
-            try {
-                const res = await authFetch(`${API}/users/online-status`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ online: nextStatus, latitude: lat, longitude: lng }),
-                });
-                if (res.ok) {
-                    setIsOnline(nextStatus);
-                    setTaskMessage(nextStatus ? "You are now ONLINE and ready for pickups!" : "You are OFFLINE.");
-                } else {
-                    setTaskMessage("Could not update status.");
-                }
-            } catch {
-                setTaskMessage("Failed to update status on server.");
-            } finally {
-                setTogglingOnline(false);
-            }
-        };
-
-        if (nextStatus && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => updateStatusOnServer(pos.coords.latitude, pos.coords.longitude),
-                () => updateStatusOnServer(null, null),
-                { enableHighAccuracy: true }
-            );
-        } else {
-            await updateStatusOnServer(null, null);
-        }
-    };
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get("token");
-
-        if (window.location.pathname === "/reset-password" && token) {
-            setResetToken(token);
-            setShowResetPassword(true);
-            setShowSignup(false);
-            setShowVerification(false);
-            setShowForgotPassword(false);
-            setResetTokenChecking(true);
-            setResetPasswordMessage("");
-
-            fetch(`${API}/users/validate-reset-token?token=${encodeURIComponent(token)}`)
-                .then(async (response) => {
-                    if (!response.ok) {
-                        let message = "This password reset link is invalid or expired.";
-                        try {
-                            const data = await response.json();
-                            message = data.error || data.message || message;
-                        } catch {}
-                        throw new Error(message);
-                    }
-                })
-                .catch((error) => {
-                    setResetPasswordMessage(error.message || "This password reset link is invalid or expired.");
-                })
-                .finally(() => setResetTokenChecking(false));
-        }
-    }, []);
-
-    const clearResetRoute = () => {
-        if (window.location.pathname === "/reset-password") {
-            window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-        }
-    };
-
-    const copyCode = (code, key) => {
-        if (!code || code === "Loading..." || code === "Unavailable") return;
-        navigator.clipboard.writeText(code).then(() => {
-            setCopiedCodeKey(key);
-            setTimeout(() => setCopiedCodeKey(null), 2000);
-        });
-    };
-
-    const handleAvatarSelect = (emoji) => {
-        setCustomAvatar(emoji);
-        localStorage.setItem("shareplate_avatar", emoji);
-    };
-
-    const handleAvatarUpload = (e) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setCustomAvatar(reader.result);
-                localStorage.setItem("shareplate_avatar", reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleRemoveAvatar = () => {
-        setCustomAvatar("");
-        localStorage.removeItem("shareplate_avatar");
-    };
-
-    const handleChangePasswordSubmit = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
-        setChangePasswordMsg("");
-
-        if (newPasswordVal !== confirmNewPasswordVal) {
-            setChangePasswordMsg("New passwords do not match.");
-            return;
-        }
-
-        if (!isPasswordStrong(newPasswordVal)) {
-            setChangePasswordMsg("Password does not meet the security criteria.");
-            return;
-        }
-
-        setChangePasswordMsg("Password updated successfully.");
-        setOldPassword("");
-        setNewPasswordVal("");
-        setConfirmNewPasswordVal("");
-    };
-
-    const submitNgoVerification = async (e) => {
-        e.preventDefault();
-        setNgoVerifyLoading(true);
-        setNgoVerifyMsg("");
+        setLoginLoading(true);
+        setLoginMessage("");
 
         try {
-            const response = await authFetch(`${API}/users/${user.id}/verify-ngo`, {
+            const res = await fetch(`${API}/users/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ darpanId, phone: ngoPhone }),
+                body: JSON.stringify({ email: email.trim(), password }),
             });
 
-            if (!response.ok) {
-                let err = "Verification failed. Check your Darpan ID & Phone.";
-                try {
-                    const data = await response.json();
-                    err = data.message || data.error || err;
-                } catch {}
-                throw new Error(err);
-            }
-
-            setUser((prev) => ({ ...prev, ngoVerified: true }));
-            setActiveModal(null);
-            setNgoVerifyMsg("");
-
-            if (pendingClaimListingId) {
-                await executeClaim(pendingClaimListingId);
-                setPendingClaimListingId(null);
-            } else {
-                setMsg("NGO verified successfully! You can now claim surplus food listings.");
-            }
-        } catch (error) {
-            setNgoVerifyMsg(error.message || "Could not complete verification.");
-        } finally {
-            setNgoVerifyLoading(false);
-        }
-    };
-
-    const openForgotPassword = () => {
-        setShowSignup(false);
-        setShowVerification(false);
-        setShowForgotPassword(true);
-        setShowResetPassword(false);
-        setForgotPasswordEmail(email.trim());
-        setForgotPasswordMessage("");
-        setLoginMessage("");
-    };
-
-    const openLogin = () => {
-        setShowSignup(false);
-        setShowVerification(false);
-        setShowForgotPassword(false);
-        setShowResetPassword(false);
-        setSignupMessage("");
-        setForgotPasswordMessage("");
-        setResetPasswordMessage("");
-        setLoginMessage("");
-        clearResetRoute();
-    };
-
-    const requestPasswordReset = async (event) => {
-        event.preventDefault();
-        setForgotPasswordLoading(true);
-        setForgotPasswordMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/forgot-password`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: forgotPasswordEmail.trim() }),
-            });
-
-            let message = "If an account exists for this email, a password reset link has been sent.";
+            const text = await res.text();
+            let data = null;
             try {
-                const data = await response.json();
-                message = data.message || data.error || message;
+                data = text ? JSON.parse(text) : null;
             } catch {}
 
-            if (!response.ok) throw new Error(message);
-            setForgotPasswordMessage(message);
-        } catch (error) {
-            setForgotPasswordMessage(error.message || "Could not process the password reset request.");
+            if (!res.ok) {
+                throw new Error(data?.message || data?.error || text || "Invalid email or password.");
+            }
+
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data));
+            setToken(data.token);
+            setUser(data);
+            setIsOnline(!!data.isOnline);
+        } catch (err) {
+            setLoginMessage(err.message || "Login failed.");
         } finally {
-            setForgotPasswordLoading(false);
+            setLoginLoading(false);
         }
     };
 
-    const resetPasswordSubmit = async (event) => {
-        event.preventDefault();
-
-        if (resetPassword !== resetConfirmPassword) {
-            setResetPasswordMessage("Passwords do not match.");
-            return;
-        }
-
-        if (!isPasswordStrong(resetPassword)) {
-            setResetPasswordMessage("Please fulfill all password requirements below.");
-            return;
-        }
-
-        setResetPasswordLoading(true);
-        setResetPasswordMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/reset-password`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    token: resetToken,
-                    newPassword: resetPassword,
-                    confirmPassword: resetConfirmPassword,
-                }),
-            });
-
-            let message = "Password reset successfully. You can now log in.";
-            try {
-                const data = await response.json();
-                message = data.message || data.error || message;
-            } catch {}
-
-            if (!response.ok) throw new Error(message);
-
-            setResetPassword("");
-            setResetConfirmPassword("");
-            setEmail("");
-            setPassword("");
-            setResetPasswordMessage("");
-            clearResetRoute();
-            setShowResetPassword(false);
-            setLoginMessage("Password reset successfully. You can now sign in.");
-        } catch (error) {
-            setResetPasswordMessage(error.message || "Could not reset your password.");
-        } finally {
-            setResetPasswordLoading(false);
-        }
-    };
-
-    const loadListings = async () => {
-        try {
-            const response = await authFetch(`${API}/listings`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setListings(data);
-        } catch {
-            setMsg("Start the Spring Boot backend first.");
-        }
-    };
-
-    const loadTasks = async (volunteerId) => {
-        try {
-            const response = await authFetch(`${API}/tasks/volunteer/${volunteerId}`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setTasks(data);
-        } catch {
-            setTaskMessage("Could not load your pickup tasks.");
-        }
-    };
-
-    const loadAllTasksForDonor = async () => {
-        try {
-            const response = await authFetch(`${API}/tasks`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setDonorTasks(data);
-        } catch {
-            setMsg("Could not load your pickup assignments.");
-        }
-    };
-
-    const loadVolunteers = async () => {
-        try {
-            const response = await authFetch(`${API}/users/volunteers`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setVolunteers(data);
-        } catch {
-            setMsg("Could not load volunteers.");
-        }
-    };
-
-    const loadNgoTasks = async () => {
-        try {
-            const response = await authFetch(`${API}/tasks`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setNgoTasks(data);
-        } catch {
-            setMsg("Could not load pickup assignments.");
-        }
-    };
-
-    useEffect(() => {
-        if (user) loadListings();
-    }, [user]);
-
-    useEffect(() => {
-        if (!user) {
-            setTasks([]);
-            setDonorTasks([]);
-            setVolunteers([]);
-            setNgoTasks([]);
-            return;
-        }
-
-        if (user.role === "VOLUNTEER") loadTasks(user.id);
-        if (user.role === "DONOR") loadAllTasksForDonor();
-        if (user.role === "NGO") {
-            loadVolunteers();
-            loadNgoTasks();
-        }
-    }, [user]);
-
-    // DONOR: load pickup codes
-    useEffect(() => {
-        if (user?.role !== "DONOR") {
-            setPickupCodes({});
-            return;
-        }
-
-        const ownListingIds = new Set(
-            listings
-                .filter((listing) => Number(listing.donorId) === Number(user.id))
-                .map((listing) => Number(listing.id))
-        );
-
-        const relevantTasks = donorTasks.filter((task) =>
-            ownListingIds.has(Number(task.listingId))
-        );
-
-        const fetchCodes = async () => {
-            for (const task of relevantTasks) {
-                if (pickupCodes[task.id]) continue;
-
-                try {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`pickup-${task.id}`]: true,
-                    }));
-
-                    const response = await authFetch(`${API}/tasks/${task.id}/pickup-code`);
-                    if (!response.ok) continue;
-
-                    const data = await response.json();
-                    setPickupCodes((previous) => ({
-                        ...previous,
-                        [task.id]: data.code,
-                    }));
-                } catch {
-                } finally {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`pickup-${task.id}`]: false,
-                    }));
-                }
-            }
-        };
-
-        if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, donorTasks]);
-
-    // NGO: load delivery codes
-    useEffect(() => {
-        if (user?.role !== "NGO") {
-            setDeliveryCodes({});
-            return;
-        }
-
-        const relevantTasks = ngoTasks.filter((task) => {
-            const listing = listings.find((item) => Number(item.id) === Number(task.listingId));
-            return listing && Number(listing.claimedByNgoId) === Number(user.id);
-        });
-
-        const fetchCodes = async () => {
-            for (const task of relevantTasks) {
-                if (deliveryCodes[task.id]) continue;
-
-                try {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`delivery-${task.id}`]: true,
-                    }));
-
-                    const response = await authFetch(`${API}/tasks/${task.id}/delivery-code`);
-                    if (!response.ok) continue;
-
-                    const data = await response.json();
-                    setDeliveryCodes((previous) => ({
-                        ...previous,
-                        [task.id]: data.code,
-                    }));
-                } catch {
-                } finally {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`delivery-${task.id}`]: false,
-                    }));
-                }
-            }
-        };
-
-        if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, ngoTasks]);
-
-    // LOGIN
-    const login = async (event) => {
-        event.preventDefault();
-        setLoading(true);
-        setLoginMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-            });
-
-            if (!response.ok) {
-                let errorMessage = "Invalid email or password.";
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorData.message || errorMessage;
-                } catch {}
-                throw new Error(errorMessage);
-            }
-
-            const authResponse = await response.json();
-            localStorage.setItem("shareplate_token", authResponse.token);
-            setUser(authResponse.user);
-            setPassword("");
-        } catch (error) {
-            const message = error?.message || "";
-            if (message.toLowerCase().includes("verify your email")) {
-                setVerificationEmail(email.trim());
-                setVerificationCode(["", "", "", "", "", ""]);
-                setVerificationMessage("Please verify your email before signing in.");
-                setShowVerification(true);
-            } else {
-                setLoginMessage("Invalid email or password.");
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // SIGNUP
-    const register = async (event) => {
-        event.preventDefault();
+    const handleRegister = async (e) => {
+        e.preventDefault();
         setSignupMessage("");
 
         if (signupPassword !== signupConfirmPassword) {
@@ -757,7 +204,7 @@ function App() {
         setSignupLoading(true);
 
         try {
-            const response = await fetch(`${API}/users/register`, {
+            const res = await fetch(`${API}/users/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -769,1790 +216,1152 @@ function App() {
                 }),
             });
 
-            if (!response.ok) {
-                let errorMessage = "Could not create account.";
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.message || errorData.error || errorMessage;
-                } catch {
-                    const errorText = await response.text();
-                    if (errorText) errorMessage = errorText;
-                }
-                throw new Error(errorMessage);
+            const text = await res.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {}
+
+            if (!res.ok) {
+                throw new Error(data?.message || data?.error || text || "Could not create account.");
             }
 
-            await response.json();
-
-            const registeredEmail = signupEmail.trim().toLowerCase();
-            setVerificationEmail(registeredEmail);
+            const regEmail = signupEmail.trim().toLowerCase();
+            setVerificationEmail(regEmail);
             setVerificationCode(["", "", "", "", "", ""]);
-            setVerificationMessage("We sent a 6-digit verification code to your email.");
+            setVerificationMessage("A 6-digit verification code has been dispatched to your email.");
             setShowVerification(true);
             setShowSignup(false);
-
-            setEmail(registeredEmail);
-            setPassword("");
-            setSignupName("");
-            setSignupEmail("");
-            setSignupPhone("");
-            setSignupPassword("");
-            setSignupConfirmPassword("");
-            setSignupRole("DONOR");
-            setSignupMessage("");
-            setLoginMessage("");
-        } catch (error) {
-            setSignupMessage(error.message || "Could not create account.");
+        } catch (err) {
+            setSignupMessage(err.message || "Registration failed.");
         } finally {
             setSignupLoading(false);
         }
     };
 
-    const updateVerificationDigit = (index, value) => {
-        const digits = String(value || "").replace(/\D/g, "").slice(0, 6);
-        const next = [...verificationCode];
-
-        if (digits.length > 1) {
-            digits.split("").forEach((digit, offset) => {
-                if (index + offset < 6) next[index + offset] = digit;
-            });
-            setVerificationCode(next);
-            document.getElementById(`verification-${Math.min(index + digits.length, 5)}`)?.focus();
-            return;
-        }
-
-        next[index] = digits;
-        setVerificationCode(next);
-        if (digits && index < 5) document.getElementById(`verification-${index + 1}`)?.focus();
-    };
-
-    const handleVerificationKeyDown = (event, index) => {
-        if (event.key === "Backspace" && !verificationCode[index] && index > 0) {
-            document.getElementById(`verification-${index - 1}`)?.focus();
-        }
-    };
-
-    const verifyEmail = async (event) => {
-        event.preventDefault();
+    const handleVerify = async (e) => {
+        e.preventDefault();
         const code = verificationCode.join("");
         if (code.length !== 6) {
-            setVerificationMessage("Enter all 6 digits from the email.");
+            setVerificationMessage("Please enter all 6 digits of the code.");
             return;
         }
+
         setVerificationLoading(true);
         setVerificationMessage("");
+
         try {
-            const response = await fetch(`${API}/users/verify-email`, {
+            const res = await fetch(`${API}/users/verify-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: verificationEmail.trim(), code }),
+                body: JSON.stringify({ email: verificationEmail, code }),
             });
-            if (!response.ok) {
-                let errorMessage = "Could not verify your email.";
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorData.message || errorMessage;
-                } catch {}
-                throw new Error(errorMessage);
+
+            const text = await res.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {}
+
+            if (!res.ok) {
+                throw new Error(data?.message || data?.error || text || "Verification failed.");
             }
+
             setShowVerification(false);
-            setVerificationCode(["", "", "", "", "", ""]);
-            setVerificationMessage("");
-            setEmail(verificationEmail.trim());
-            setPassword("");
-            setLoginMessage("Email verified successfully. You can now sign in.");
-        } catch (error) {
-            setVerificationMessage(error.message || "Could not verify your email.");
+            setLoginMessage("Email verified successfully! You can now sign in.");
+        } catch (err) {
+            setVerificationMessage(err.message || "Verification failed.");
         } finally {
             setVerificationLoading(false);
         }
     };
 
-    const resendVerification = async () => {
-        if (resendCooldown > 0 || resendLoading) return;
-        setResendLoading(true);
-        setVerificationMessage("");
+    const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        setForgotLoading(true);
+        setForgotMessage("");
+
         try {
-            const response = await fetch(`${API}/users/resend-verification`, {
+            const res = await fetch(`${API}/users/forgot-password`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: verificationEmail.trim() }),
+                body: JSON.stringify({ email: forgotEmail.trim() }),
             });
-            if (!response.ok) {
-                let errorMessage = "Could not resend the verification code.";
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorData.message || errorMessage;
-                } catch {}
-                throw new Error(errorMessage);
+
+            const text = await res.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {}
+
+            if (!res.ok) {
+                throw new Error(data?.message || data?.error || text || "Unable to send reset instructions.");
             }
-            setVerificationCode(["", "", "", "", "", ""]);
-            setVerificationMessage("A new verification code has been sent.");
-            setResendCooldown(30);
-        } catch (error) {
-            setVerificationMessage(error.message || "Could not resend the verification code.");
+
+            setForgotMessage("If this account exists, password reset instructions have been sent.");
+        } catch (err) {
+            setForgotMessage(err.message || "Password reset request failed.");
         } finally {
-            setResendLoading(false);
+            setForgotLoading(false);
         }
     };
 
-    const openSignup = () => {
-        setShowSignup(true);
-        setShowVerification(false);
-        setShowForgotPassword(false);
-        setShowResetPassword(false);
-        setSignupMessage("");
-        setLoginMessage("");
-    };
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        setResetMessage("");
 
-    const logout = () => {
-        localStorage.removeItem("shareplate_token");
-        setUser(null);
-        setMenuOpen(false);
-        setActiveModal(null);
-        setEmail("");
-        setPassword("");
-        setLoginMessage("");
-        setMsg("");
-        setTaskMessage("");
-        setTasks([]);
-        setDonorTasks([]);
-        setVolunteers([]);
-        setNgoTasks([]);
-        setSelectedVolunteers({});
-        setHandoverCodes({});
-        setPickupCodes({});
-        setDeliveryCodes({});
-        setIsOnline(false);
-    };
+        if (newPassword !== confirmNewPassword) {
+            setResetMessage("Passwords do not match.");
+            return;
+        }
 
-    const getDeadlineBounds = () => {
-        const now = new Date();
-        const minimum = new Date(now.getTime() + 30 * 60 * 1000);
-        const maximum = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const toLocalInput = (date) => {
-            const offset = date.getTimezoneOffset();
-            return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
-        };
-        return { min: toLocalInput(minimum), max: toLocalInput(maximum) };
-    };
+        if (!isPasswordStrong(newPassword)) {
+            setResetMessage("Please satisfy all password complexity rules.");
+            return;
+        }
 
-    const validatePickupDeadline = (value) => {
-        if (!value) return "Please choose a pickup deadline.";
-        const deadline = new Date(value);
-        if (Number.isNaN(deadline.getTime())) return "Please choose a valid pickup date and time.";
-
-        const now = Date.now();
-        const minimum = now + 30 * 60 * 1000;
-        const maximum = now + 7 * 24 * 60 * 60 * 1000;
-
-        if (deadline.getTime() < now) return "Pickup deadline cannot be in the past.";
-        if (deadline.getTime() < minimum) return "Pickup deadline must be at least 30 minutes from now.";
-        if (deadline.getTime() > maximum) return "Pickup deadline cannot be more than 7 days from now.";
-        return "";
-    };
-
-    const postFood = async (event) => {
-        event.preventDefault();
-        setPosting(true);
-        setMsg("");
+        setResetLoading(true);
 
         try {
-            const response = await authFetch(`${API}/listings`, {
+            const res = await fetch(`${API}/users/reset-password`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token: resetToken.trim(), newPassword }),
+            });
+
+            const text = await res.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {}
+
+            if (!res.ok) {
+                throw new Error(data?.message || data?.error || text || "Password reset failed.");
+            }
+
+            setShowResetPassword(false);
+            setLoginMessage("Password updated successfully. Please log in with your new password.");
+        } catch (err) {
+            setResetMessage(err.message || "Password reset failed.");
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.clear();
+        setToken("");
+        setUser(null);
+        setDrawerOpen(false);
+    };
+
+    const toggleVolunteerDuty = async () => {
+        const nextStatus = !isOnline;
+        setLocationStatus("Detecting live coordinates...");
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    await updateDutyStatus(nextStatus, pos.coords.latitude, pos.coords.longitude);
+                    setLocationStatus(nextStatus ? "Duty: Online (GPS locked)" : "Duty: Offline");
+                },
+                async () => {
+                    await updateDutyStatus(nextStatus, null, null);
+                    setLocationStatus(nextStatus ? "Duty: Online (GPS unavailable)" : "Duty: Offline");
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        } else {
+            await updateDutyStatus(nextStatus, null, null);
+            setLocationStatus(nextStatus ? "Duty: Online" : "Duty: Offline");
+        }
+    };
+
+    const updateDutyStatus = async (online, latitude, longitude) => {
+        try {
+            const res = await fetch(`${API}/users/me/duty`, {
+                method: "PUT",
+                headers: authHeaders,
+                body: JSON.stringify({ online, latitude, longitude }),
+            });
+            if (res.ok) {
+                setIsOnline(online);
+            }
+        } catch (err) {
+            console.error("Failed to update status", err);
+        }
+    };
+
+    const captureDonorGps = () => {
+        if (!navigator.geolocation) {
+            setFoodGpsStatus("GPS is not supported by your browser.");
+            return;
+        }
+
+        setFoodGpsStatus("Detecting current coordinates...");
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setFoodLatitude(pos.coords.latitude);
+                setFoodLongitude(pos.coords.longitude);
+                setFoodGpsStatus(`Lat: ${pos.coords.latitude.toFixed(4)}, Lon: ${pos.coords.longitude.toFixed(4)}`);
+            },
+            () => {
+                setFoodGpsStatus("Could not fetch location. Check browser location permissions.");
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
+
+    const fetchListings = async () => {
+        try {
+            const res = await fetch(`${API}/food-listings`, { headers: authHeaders });
+            if (res.ok) {
+                setListings(await res.json());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const fetchVolunteerTasks = async () => {
+        try {
+            const res = await fetch(`${API}/tasks/volunteer/me`, { headers: authHeaders });
+            if (res.ok) {
+                setTasks(await res.json());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const fetchNgoTasks = async () => {
+        try {
+            const res = await fetch(`${API}/tasks/ngo/me`, { headers: authHeaders });
+            if (res.ok) {
+                setTasks(await res.json());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const fetchOnlineVolunteers = async () => {
+        try {
+            const res = await fetch(`${API}/users/volunteers/online`, { headers: authHeaders });
+            if (res.ok) {
+                setAvailableVolunteers(await res.json());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const fetchPendingNgos = async () => {
+        try {
+            const res = await fetch(`${API}/admin/ngos/pending`, { headers: authHeaders });
+            if (res.ok) {
+                setPendingNgos(await res.json());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleVerifyNgo = async (ngoId, approved) => {
+        try {
+            const res = await fetch(`${API}/admin/ngos/${ngoId}/verify`, {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify({ approved }),
+            });
+            if (res.ok) {
+                setAdminMessage("NGO verification status updated.");
+                fetchPendingNgos();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const createListing = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await fetch(`${API}/food-listings`, {
+                method: "POST",
+                headers: authHeaders,
                 body: JSON.stringify({
-                    foodName,
-                    description,
-                    quantity: Number(quantity),
-                    location,
-                    latitude: listingCoords.lat,
-                    longitude: listingCoords.lng,
-                    pickupDeadline,
-                    safetyDetails,
-                    donorId: user.id,
+                    title: foodTitle,
+                    description: foodDescription,
+                    quantity: Number(foodQuantity),
+                    address: foodAddress,
+                    latitude: foodLatitude,
+                    longitude: foodLongitude,
                 }),
             });
 
-            if (!response.ok) throw new Error();
-
-            setFoodName("");
-            setDescription("");
-            setQuantity("");
-            setLocation("");
-            setListingCoords({ lat: null, lng: null });
-            setPickupDeadline("");
-            setSafetyDetails("");
-            setMsg("Food listing posted successfully with GPS coordinates.");
-            await loadListings();
-        } catch {
-            setMsg("Could not post food listing.");
-        } finally {
-            setPosting(false);
-        }
-    };
-
-    const handleClaimClick = (listingId) => {
-        if (!user || user.role !== "NGO") {
-            setMsg("Only an NGO user can claim a listing.");
-            return;
-        }
-
-        if (!user.ngoVerified) {
-            setPendingClaimListingId(listingId);
-            setActiveModal("ngo-verify");
-            return;
-        }
-
-        executeClaim(listingId);
-    };
-
-    const executeClaim = async (listingId) => {
-        try {
-            const response = await authFetch(`${API}/listings/${listingId}/claim/${user.id}`, {
-                method: "POST",
-            });
-
-            if (!response.ok) {
-                let errorText = "Could not claim listing.";
-                try {
-                    const data = await response.json();
-                    errorText = data.message || data.error || errorText;
-                } catch {
-                    const txt = await response.text();
-                    if (txt) errorText = txt;
-                }
-                throw new Error(errorText);
+            if (res.ok) {
+                setFoodTitle("");
+                setFoodDescription("");
+                setFoodQuantity("");
+                setFoodAddress("");
+                setFoodLatitude(null);
+                setFoodLongitude(null);
+                setFoodGpsStatus("");
+                fetchListings();
             }
-
-            setMsg("Listing claimed successfully.");
-            await loadListings();
-        } catch (error) {
-            setMsg(error.message || "Could not claim listing.");
+        } catch (err) {
+            console.error(err);
         }
-    };
-
-    const selectVolunteer = (listingId, volunteerId) => {
-        setSelectedVolunteers((previous) => ({
-            ...previous,
-            [listingId]: volunteerId,
-        }));
-    };
-
-    const getTaskForListing = (listingId, source = ngoTasks) => {
-        return source.find((task) => Number(task.listingId) === Number(listingId));
-    };
-
-    const getVolunteer = (volunteerId) => {
-        return volunteers.find((volunteer) => Number(volunteer.id) === Number(volunteerId));
     };
 
     const assignVolunteer = async (listingId) => {
-        const volunteerId = selectedVolunteers[listingId];
-
-        if (!volunteerId) {
-            setMsg("Please select a volunteer first.");
-            return;
-        }
-
-        const existingTask = getTaskForListing(listingId);
-        if (existingTask) {
-            setMsg("A volunteer is already assigned to this listing.");
-            return;
-        }
-
-        setAssigningListing(listingId);
-        setMsg("");
+        const volId = selectedVolunteer[listingId];
+        if (!volId) return;
 
         try {
-            const response = await authFetch(
-                `${API}/tasks?listingId=${listingId}&volunteerId=${volunteerId}`,
-                { method: "POST" }
-            );
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "Assignment failed");
-            }
-
-            await loadNgoTasks();
-            await loadAllTasksForDonor();
-
-            setSelectedVolunteers((previous) => ({
-                ...previous,
-                [listingId]: "",
-            }));
-
-            setMsg("Volunteer assigned successfully.");
-        } catch (error) {
-            setMsg(error.message || "Could not assign volunteer.");
-        } finally {
-            setAssigningListing(null);
-        }
-    };
-
-    const updateHandoverCode = (taskId, code) => {
-        const numericCode = code.replace(/\D/g, "").slice(0, 6);
-        setHandoverCodes((previous) => ({
-            ...previous,
-            [taskId]: numericCode,
-        }));
-    };
-
-    const collectTask = async (taskId) => {
-        const code = handoverCodes[taskId];
-
-        if (!code || code.trim() === "") {
-            setTaskMessage("Enter the pickup code first.");
-            return;
-        }
-
-        try {
-            const response = await authFetch(`${API}/tasks/${taskId}/collect`, {
+            const res = await fetch(`${API}/tasks/assign`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code: code.trim() }),
+                headers: authHeaders,
+                body: JSON.stringify({ listingId, volunteerId: volId }),
             });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText);
+            if (res.ok) {
+                fetchListings();
+                fetchNgoTasks();
             }
-
-            setTaskMessage("Food collected successfully.");
-            setHandoverCodes((previous) => ({
-                ...previous,
-                [taskId]: "",
-            }));
-            await loadTasks(user.id);
-        } catch (error) {
-            setTaskMessage(error.message || "Could not collect food. Check the pickup code.");
+        } catch (err) {
+            console.error(err);
         }
     };
 
-    const deliverTask = async (taskId) => {
-        const code = handoverCodes[taskId];
-
-        if (!code || code.trim() === "") {
-            setTaskMessage("Enter the delivery code first.");
-            return;
-        }
+    const confirmDeliveryWithOtp = async (taskId) => {
+        const code = pickupCodeInput[taskId];
+        if (!code) return;
 
         try {
-            const response = await authFetch(`${API}/tasks/${taskId}/deliver`, {
+            const res = await fetch(`${API}/tasks/${taskId}/complete`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code: code.trim() }),
+                headers: authHeaders,
+                body: JSON.stringify({ pickupCode: code }),
             });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText);
+            if (res.ok) {
+                fetchVolunteerTasks();
             }
-
-            setTaskMessage("Food delivered successfully.");
-            setHandoverCodes((previous) => ({
-                ...previous,
-                [taskId]: "",
-            }));
-            await loadTasks(user.id);
-        } catch (error) {
-            setTaskMessage(error.message || "Could not mark the food as delivered.");
+        } catch (err) {
+            console.error(err);
         }
     };
 
-    const refreshAll = async () => {
-        await loadListings();
-
-        if (user.role === "NGO") {
-            await loadNgoTasks();
-            await loadVolunteers();
-        }
-
-        if (user.role === "DONOR") {
-            await loadAllTasksForDonor();
-        }
-
-        if (user.role === "VOLUNTEER") {
-            await loadTasks(user.id);
-        }
-    };
-
-    const donorOwnTasks = donorTasks.filter((task) => {
-        const listing = listings.find((item) => Number(item.id) === Number(task.listingId));
-        return listing && Number(listing.donorId) === Number(user?.id);
+    const filteredListings = listings.filter((l) => {
+        const matchesSearch =
+            l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            l.address.toLowerCase().includes(searchQuery.toLowerCase());
+        if (filterTab === "ALL") return matchesSearch;
+        return matchesSearch && l.status === filterTab;
     });
 
-    const stats = useMemo(() => {
-        let totalMeals = 0;
-        for (const item of listings) {
-            const rawVal = item.quantity ?? item.meals ?? 0;
-            const num = Number(rawVal);
-            if (!Number.isNaN(num)) {
-                totalMeals += num;
-            }
-        }
+    if (!token) {
+        return (
+            <div className="app-container">
+                {showVerification ? (
+                    <div className="login-card verification-card">
+                        <div className="verification-hero">
+                            <span className="verification-icon">{"\u2709"}</span>
+                        </div>
+                        <h2>Verify your email</h2>
+                        <p>We sent a 6-digit confirmation code to <strong className="verification-email">{verificationEmail}</strong></p>
 
-        const deliveredCount = listings.filter((l) => {
-            const task = donorTasks.find((t) => Number(t.listingId) === Number(l.id)) ||
-                         ngoTasks.find((t) => Number(t.listingId) === Number(l.id)) ||
-                         tasks.find((t) => Number(t.listingId) === Number(l.id));
-            return task?.status === "DELIVERED";
-        }).length;
+                        {verificationMessage && <div className="msg">{verificationMessage}</div>}
 
-        const activeRescues = listings.filter((l) => l.status === "CLAIMED").length;
-        return { totalMeals, deliveredCount, activeRescues };
-    }, [listings, donorTasks, ngoTasks, tasks]);
+                        <form className="verification-form" onSubmit={handleVerify}>
+                            <div className="otp-grid">
+                                {verificationCode.map((digit, index) => (
+                                    <input
+                                        key={index}
+                                        id={`otp-${index}`}
+                                        type="text"
+                                        maxLength="1"
+                                        className="otp-input"
+                                        value={digit}
+                                        onChange={(e) => {
+                                            const val = e.target.value.slice(-1);
+                                            const newCode = [...verificationCode];
+                                            newCode[index] = val;
+                                            setVerificationCode(newCode);
+                                            if (val && index < 5) {
+                                                document.getElementById(`otp-${index + 1}`)?.focus();
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Backspace" && !verificationCode[index] && index > 0) {
+                                                document.getElementById(`otp-${index - 1}`)?.focus();
+                                            }
+                                        }}
+                                    />
+                                ))}
+                            </div>
 
-    const filteredListings = useMemo(() => {
-        return listings.filter((listing) => {
-            const matchesSearch =
-                (listing.foodName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (listing.location || "").toLowerCase().includes(searchTerm.toLowerCase());
+                            <button type="submit" className="submit-large primary" disabled={verificationLoading}>
+                                {verificationLoading ? "Verifying..." : "Validate PIN"}
+                            </button>
+                        </form>
+                    </div>
+                ) : showResetPassword ? (
+                    <div className="login-card">
+                        <span className="eyebrow">SECURITY RECOVERY</span>
+                        <h2>Set New Password</h2>
+                        <p>Enter the reset token sent to your email and your new password.</p>
 
-            if (!matchesSearch) return false;
+                        {resetMessage && <div className="msg">{resetMessage}</div>}
 
-            const listingTask =
-                donorTasks.find((t) => Number(t.listingId) === Number(listing.id)) ||
-                ngoTasks.find((t) => Number(t.listingId) === Number(listing.id)) ||
-                tasks.find((t) => Number(t.listingId) === Number(listing.id));
-            const isCompleted = listingTask?.status === "DELIVERED";
+                        <form onSubmit={handleResetPassword}>
+                            <label>Reset Token</label>
+                            <input
+                                type="text"
+                                value={resetToken}
+                                onChange={(e) => setResetToken(e.target.value)}
+                                placeholder="Paste token here"
+                                required
+                            />
 
-            if (statusFilter === "AVAILABLE") return listing.status === "AVAILABLE";
-            if (statusFilter === "CLAIMED") return listing.status === "CLAIMED" && !isCompleted;
-            if (statusFilter === "DELIVERED") return isCompleted;
-            return true;
-        });
-    }, [listings, searchTerm, statusFilter, donorTasks, ngoTasks, tasks]);
+                            <label>New Password</label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="Enter strong password"
+                                required
+                            />
 
-    const userHistory = useMemo(() => {
-        if (!user) return [];
-        if (user.role === "DONOR") {
-            return listings
-                .filter((l) => Number(l.donorId) === Number(user.id))
-                .map((l) => {
-                    const task = donorTasks.find((t) => Number(t.listingId) === Number(l.id));
-                    return {
-                        id: l.id,
-                        title: l.foodName,
-                        quantity: l.quantity,
-                        location: l.location,
-                        status: task?.status === "DELIVERED" ? "DELIVERED" : l.status,
-                        time: l.pickupDeadline,
-                    };
-                });
-        }
-        if (user.role === "NGO") {
-            return listings
-                .filter((l) => Number(l.claimedByNgoId) === Number(user.id))
-                .map((l) => {
-                    const task = ngoTasks.find((t) => Number(t.listingId) === Number(l.id));
-                    return {
-                        id: l.id,
-                        title: l.foodName,
-                        quantity: l.quantity,
-                        location: l.location,
-                        status: task?.status === "DELIVERED" ? "DELIVERED" : "COORDINATING",
-                        time: l.pickupDeadline,
-                    };
-                });
-        }
-        if (user.role === "VOLUNTEER") {
-            return tasks.map((t) => {
-                const listing = listings.find((l) => Number(l.id) === Number(t.listingId));
-                return {
-                    id: t.id,
-                    title: listing?.foodName || `Pickup Task #${t.id}`,
-                    quantity: listing?.quantity || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“",
-                    location: listing?.location || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“",
-                    status: t.status,
-                    time: t.deliveredAt || t.collectedAt || "Pending",
-                };
-            });
-        }
-        return [];
-    }, [user, listings, donorTasks, ngoTasks, tasks]);
+                            <PasswordRequirements password={newPassword} />
 
-    const getUrgencyBadge = (deadlineStr) => {
-        if (!deadlineStr) return null;
-        const diffMs = new Date(deadlineStr).getTime() - Date.now();
-        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffMs <= 0) return <span className="urgency-badge expired">ÃƒÂ¢Ã…Â¡Ã‚Â  Expired</span>;
-        if (diffHrs < 3) return <span className="urgency-badge critical">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â¥ &lt;3h left</span>;
-        if (diffHrs < 12) return <span className="urgency-badge urgent">ÃƒÂ¢Ã‚ÂÃ‚Â± {diffHrs}h left</span>;
-        return <span className="urgency-badge calm">ÃƒÂ¢Ã‚ÂÃ‚Â± {diffHrs}h left</span>;
-    };
+                            <label>Confirm New Password</label>
+                            <input
+                                type="password"
+                                value={confirmNewPassword}
+                                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                placeholder="Confirm new password"
+                                required
+                            />
 
-    const renderAvatarDisplay = (size = "normal") => {
-        if (customAvatar && customAvatar.startsWith("data:image")) {
-            return <img src={customAvatar} alt="Profile" className={`avatar-img ${size}`} />;
-        }
-        if (customAvatar) {
-            return <div className={`avatar-chip ${size}`}>{customAvatar}</div>;
-        }
-        return <div className={`avatar-chip ${size}`}>{user ? user.name.charAt(0).toUpperCase() : "U"}</div>;
-    };
+                            <button type="submit" className="submit-large primary" disabled={resetLoading}>
+                                {resetLoading ? "Updating..." : "Update Password"}
+                            </button>
+
+                            <div className="auth-footer-nav">
+                                <button type="button" className="text-link-button" onClick={() => setShowResetPassword(false)}>
+                                    Back to Login
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                ) : showSignup ? (
+                    <div className="login-card">
+                        <span className="eyebrow">JOIN SHAREPLATE</span>
+                        <h2>Create your account</h2>
+                        <p>Coordinate surplus food rescue across restaurants, shelters, and volunteers.</p>
+
+                        {signupMessage && <div className="msg">{signupMessage}</div>}
+
+                        <form onSubmit={handleRegister}>
+                            <label>Full name</label>
+                            <input
+                                type="text"
+                                value={signupName}
+                                onChange={(e) => setSignupName(e.target.value)}
+                                placeholder="e.g. Shakthi"
+                                required
+                            />
+
+                            <label>Email</label>
+                            <input
+                                type="email"
+                                value={signupEmail}
+                                onChange={(e) => setSignupEmail(e.target.value)}
+                                placeholder="name@organization.org"
+                                required
+                            />
+
+                            <label>Phone number (for delivery coordination)</label>
+                            <input
+                                type="tel"
+                                value={signupPhone}
+                                onChange={(e) => setSignupPhone(e.target.value)}
+                                placeholder="e.g. 9876543210"
+                                required
+                            />
+                            <small className="field-hint">
+                                Your phone number should look like: 10-digit mobile (e.g. 9876543210)
+                            </small>
+
+                            <label>Password</label>
+                            <input
+                                type="password"
+                                value={signupPassword}
+                                onChange={(e) => setSignupPassword(e.target.value)}
+                                placeholder="Create a strong password"
+                                required
+                            />
+
+                            <PasswordRequirements password={signupPassword} />
+
+                            <label>Confirm password</label>
+                            <input
+                                type="password"
+                                value={signupConfirmPassword}
+                                onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                                placeholder="Re-enter your password"
+                                required
+                            />
+
+                            <label>I want to join as</label>
+                            <select value={signupRole} onChange={(e) => setSignupRole(e.target.value)}>
+                                <option value="DONOR">Donor (Restaurant, Banquet, Individual)</option>
+                                <option value="NGO">NGO (Shelter, Charity Organization)</option>
+                                <option value="VOLUNTEER">Volunteer (Delivery Partner)</option>
+                            </select>
+
+                            <button type="submit" className="submit-large primary" disabled={signupLoading}>
+                                {signupLoading ? "Creating Account..." : "Create Account"}
+                            </button>
+
+                            <div className="auth-footer-nav">
+                                <span>Already have an account?</span>
+                                <button type="button" className="text-link-button" onClick={() => setShowSignup(false)}>
+                                    Sign in
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                ) : (
+                    <div className="login-card">
+                        <span className="eyebrow">WELCOME BACK</span>
+                        <h2>Sign in to SharePlate</h2>
+                        <p>Rescue food, minimize waste, and serve communities in need.</p>
+
+                        {loginMessage && <div className="msg">{loginMessage}</div>}
+
+                        <form onSubmit={handleLogin}>
+                            <label>Email</label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="name@organization.org"
+                                required
+                            />
+
+                            <div className="password-header-row">
+                                <label>Password</label>
+                                <button
+                                    type="button"
+                                    className="inline-forgot-link"
+                                    onClick={() => setShowForgotPassword(true)}
+                                >
+                                    Forgot password?
+                                </button>
+                            </div>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Your password"
+                                required
+                            />
+
+                            <button type="submit" className="submit-large primary" disabled={loginLoading}>
+                                {loginLoading ? "Authenticating..." : "Sign In"}
+                            </button>
+
+                            <div className="auth-footer-nav">
+                                <span>Don't have an account?</span>
+                                <button type="button" className="text-link-button" onClick={() => setShowSignup(true)}>
+                                    Create account
+                                </button>
+                            </div>
+
+                            <div className="auth-footer-nav" style={{ marginTop: "10px" }}>
+                                <button type="button" className="text-button" onClick={() => setShowResetPassword(true)}>
+                                    Have a reset token? Click here
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
+                {showForgotPassword && (
+                    <div className="modal-backdrop">
+                        <div className="modal-card">
+                            <div className="modal-header">
+                                <h3>Reset Password</h3>
+                                <button type="button" className="close-drawer" onClick={() => setShowForgotPassword(false)}>
+                                    {"\u2715"}
+                                </button>
+                            </div>
+                            <p className="history-intro">Enter your account email to receive a password reset token.</p>
+
+                            {forgotMessage && <div className="msg">{forgotMessage}</div>}
+
+                            <form onSubmit={handleForgotPassword}>
+                                <label>Account Email</label>
+                                <input
+                                    type="email"
+                                    value={forgotEmail}
+                                    onChange={(e) => setForgotEmail(e.target.value)}
+                                    placeholder="name@organization.org"
+                                    required
+                                />
+
+                                <button type="submit" className="submit-large primary" disabled={forgotLoading}>
+                                    {forgotLoading ? "Dispatching..." : "Send Reset Token"}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="app-container">
-            {/* TOP NAVIGATION BAR */}
             <header className="main-header">
                 <div className="brand-group">
-                    <div className="brand-icon">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â²</div>
+                    <span className="brand-icon">{"\u{1F372}"}</span>
                     <div>
                         <h1>SharePlate</h1>
-                        <p>Surplus food rescue & coordination</p>
+                        <p>Real-Time Surplus Food Rescue & Rapid Logistics</p>
                     </div>
                 </div>
 
                 <div className="header-actions">
-                    {/* SWIGGY/ZOMATO VOLUNTEER ONLINE/OFFLINE TOGGLE */}
-                    {user?.role === "VOLUNTEER" && (
+                    {user.role === "VOLUNTEER" && (
                         <button
                             type="button"
                             className={`duty-toggle-btn ${isOnline ? "online" : "offline"}`}
-                            onClick={toggleOnlineStatus}
-                            disabled={togglingOnline}
-                            title="Toggle your availability for NGO task assignment"
+                            onClick={toggleVolunteerDuty}
                         >
                             <span className="duty-dot"></span>
-                            {togglingOnline ? "Updating..." : isOnline ? "Online (On Duty)" : "Offline (Off Duty)"}
+                            {isOnline ? "Duty: Online" : "Duty: Offline"}
                         </button>
                     )}
 
-                    <button
-                        type="button"
-                        className="theme-toggle"
-                        onClick={toggleTheme}
-                        aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-                    >
-                        {theme === "dark" ? "ÃƒÂ¢Ã‹Å“Ã¢â€šÂ¬ Light" : "ÃƒÂ¢Ã‹Å“Ã‚Â¾ Dark"}
+                    <button type="button" className="theme-toggle" onClick={toggleTheme}>
+                        {theme === "dark" ? "\u2600 Light" : "\u{1F319} Dark"}
                     </button>
 
-                    {user && (
-                        <button
-                            type="button"
-                            className="hamburger-btn"
-                            onClick={() => setMenuOpen(!menuOpen)}
-                            aria-label="Toggle Navigation Menu"
-                        >
-                            <span className="hamburger-line"></span>
-                            <span className="hamburger-line"></span>
-                            <span className="hamburger-line"></span>
-                        </button>
-                    )}
+                    <button type="button" className="hamburger-btn" onClick={() => setDrawerOpen(true)}>
+                        <span className="hamburger-line"></span>
+                        <span className="hamburger-line"></span>
+                        <span className="hamburger-line"></span>
+                    </button>
                 </div>
             </header>
 
-            {/* SLIDE-OUT MENU DRAWER */}
-            {user && (
-                <>
-                    <div
-                        className={`drawer-backdrop ${menuOpen ? "open" : ""}`}
-                        onClick={() => setMenuOpen(false)}
-                    />
-                    <aside className={`menu-drawer ${menuOpen ? "open" : ""}`}>
-                        <div className="drawer-header">
-                            <h3>Account & Navigation</h3>
-                            <button className="close-drawer" onClick={() => setMenuOpen(false)}>ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢</button>
-                        </div>
+            {/* HAMBURGER SIDE DRAWER */}
+            <div className={`drawer-backdrop ${drawerOpen ? "open" : ""}`} onClick={() => setDrawerOpen(false)} />
+            <aside className={`menu-drawer ${drawerOpen ? "open" : ""}`}>
+                <div className="drawer-header">
+                    <h3>Control Panel</h3>
+                    <button type="button" className="close-drawer" onClick={() => setDrawerOpen(false)}>
+                        {"\u2715"}
+                    </button>
+                </div>
 
-                        <div className="drawer-user-info" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
-                            {renderAvatarDisplay("normal")}
-                            <div className="user-text-col">
-                                <strong>{user.name}</strong>
-                                <small>{user.email}</small>
-                                <span className="role-tag">
-                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Verified" : "ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Pending")}
-                                </span>
-                            </div>
-                        </div>
+                <div className="drawer-user-info" onClick={() => { setShowProfileModal(true); setDrawerOpen(false); }}>
+                    <div className="avatar-chip">
+                        {userAvatar || user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="user-text-col">
+                        <strong>{user.name}</strong>
+                        <small>{user.email}</small>
+                        <span className="role-tag">{user.role}</span>
+                    </div>
+                </div>
 
-                        <div className="drawer-nav">
-                            <div className="nav-item active" onClick={() => setMenuOpen(false)}>
-                                <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬Â¹</span> Active Dashboard
-                            </div>
-                            <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("history"); }}>
-                                <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…â€œ</span> Rescue Activity History
-                            </div>
-                            {user.role === "NGO" && !user.ngoVerified && (
-                                <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("ngo-verify"); }}>
-                                    <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Â¡ÃƒÂ¯Ã‚Â¸Ã‚Â</span> Complete NGO Verification
-                                </div>
-                            )}
-                            <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
-                                <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¤</span> Profile & Avatar
-                            </div>
-                            <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("security"); }}>
-                                <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬â„¢</span> Security & Password
-                            </div>
-                            <div className="nav-item" onClick={() => { setMenuOpen(false); refreshAll(); }}>
-                                <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾</span> Refresh Platform Data
-                            </div>
-                            <div className="nav-item" onClick={toggleTheme}>
-                                <span>ÃƒÂ°Ã…Â¸Ã…â€™Ã¢â‚¬Å“</span> Theme: <b>{theme === "dark" ? "Dark" : "Light"}</b>
-                            </div>
+                <nav className="drawer-nav">
+                    <div className="nav-item active" onClick={() => setDrawerOpen(false)}>
+                        <span>{"\u{1F3E0}"}</span> Overview
+                    </div>
+                    <div className="nav-item" onClick={() => { setShowHistoryModal(true); setDrawerOpen(false); }}>
+                        <span>{"\u{1F4DC}"}</span> Rescue History & Activity
+                    </div>
+                    {user.role === "ADMIN" && (
+                        <div className="nav-item highlight-nav" onClick={() => { setShowAdminModal(true); setDrawerOpen(false); }}>
+                            <span>{"\u{1F6E1}\uFE0F"}</span> Admin Verification Portal
                         </div>
+                    )}
+                </nav>
 
-                        <div className="drawer-footer">
-                            <button className="drawer-logout-btn" onClick={logout}>
-                                Sign Out
+                <button type="button" className="drawer-logout-btn" onClick={handleLogout}>
+                    Sign Out
+                </button>
+            </aside>
+
+            {/* USER PROFILE MODAL */}
+            {showProfileModal && (
+                <div className="modal-backdrop">
+                    <div className="modal-card">
+                        <div className="modal-header">
+                            <h3>Account Profile</h3>
+                            <button type="button" className="close-drawer" onClick={() => setShowProfileModal(false)}>
+                                {"\u2715"}
                             </button>
                         </div>
-                    </aside>
-                </>
-            )}
 
-            {/* USER SETTINGS / MODALS */}
-            {activeModal && (
-                <div className="modal-backdrop" onClick={() => setActiveModal(null)}>
-                    <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>
-                                {activeModal === "profile" && "Profile & Avatar Customization"}
-                                {activeModal === "history" && `${user.role} Rescue Activity History`}
-                                {activeModal === "security" && "Security & Password Management"}
-                                {activeModal === "ngo-verify" && "NGO Legal Verification"}
-                            </h3>
-                            <button className="close-drawer" onClick={() => setActiveModal(null)}>ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢</button>
+                        <div className="avatar-preview-row">
+                            <div className="avatar-chip large">
+                                {userAvatar || user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h4>{user.name}</h4>
+                                <p>{user.email}</p>
+                                <span className="role-tag">{user.role}</span>
+                            </div>
                         </div>
 
-                        {/* NGO VERIFICATION ONBOARDING MODAL */}
-                        {activeModal === "ngo-verify" && (
-                            <div className="modal-body">
-                                <p className="history-intro">
-                                    To protect food safety and prevent misuse, NGOs must provide their Government Darpan ID or Society Registration Number to claim listings.
-                                </p>
+                        <label>Choose Avatar Icon</label>
+                        <div className="avatar-preset-grid">
+                            {["\u{1F468}\u200D\u{1F373}", "\u{1F372}", "\u{1F331}", "\u{1F6F5}", "\u{1F91D}", "\u{1F957}", "\u{1F4E6}", "\u{1F49A}", "\u26A1", "\u{1F31F}"].map((emoji, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    className={`avatar-preset-btn ${userAvatar === emoji ? "selected" : ""}`}
+                                    onClick={() => {
+                                        setUserAvatar(emoji);
+                                        localStorage.setItem("user_avatar", emoji);
+                                    }}
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
 
-                                <form onSubmit={submitNgoVerification} className="security-form">
-                                    <label>NGO Darpan Unique ID / Reg Number</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Example: TN/2021/0123456"
-                                        value={darpanId}
-                                        onChange={(e) => setDarpanId(e.target.value)}
-                                        required
-                                    />
-                                    <small className="field-hint">
-                                        Registered on ngodarpan.gov.in or under Indian Societies/Trusts Act.
-                                    </small>
-
-                                    <label>Authorized Representative Mobile (10-digits)</label>
-                                    <input
-                                        type="tel"
-                                        pattern="[0-9]{10}"
-                                        maxLength="10"
-                                        placeholder="Example: 9876543210"
-                                        value={ngoPhone}
-                                        onChange={(e) => setNgoPhone(e.target.value.replace(/\D/g, ""))}
-                                        required
-                                    />
-
-                                    <button className="primary submit-large" type="submit" disabled={ngoVerifyLoading}>
-                                        {ngoVerifyLoading ? "Verifying Credentials..." : "Submit & Activate NGO Account"}
-                                    </button>
-                                </form>
-
-                                {ngoVerifyMsg && (
-                                    <div className="msg" role="status">
-                                        {ngoVerifyMsg}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* PROFILE & AVATAR MODAL */}
-                        {activeModal === "profile" && (
-                            <div className="modal-body">
-                                <div className="avatar-preview-row">
-                                    {renderAvatarDisplay("large")}
-                                    <div>
-                                        <h4>{user.name}</h4>
-                                        <p>{user.email}</p>
-                                        <span className="role-tag">{user.role}</span>
-                                    </div>
-                                </div>
-
-                                <label>Choose Avatar Icon</label>
-                                <div className="avatar-preset-grid">
-                                    {["ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â±", "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â²", "ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â¾", "ÃƒÂ°Ã…Â¸Ã‚Â¦Ã‚Â¸", "ÃƒÂ°Ã…Â¸Ã‚Â¤Ã‚Â", "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦", "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Âµ", "ÃƒÂ¢Ã‚ÂÃ‚Â¤ÃƒÂ¯Ã‚Â¸Ã‚Â", "ÃƒÂ°Ã…Â¸Ã…â€™Ã…Â¸", "ÃƒÂ¢Ã…â€œÃ‚Â¨"].map((emoji) => (
-                                        <button
-                                            key={emoji}
-                                            type="button"
-                                            className={`avatar-preset-btn ${customAvatar === emoji ? "selected" : ""}`}
-                                            onClick={() => handleAvatarSelect(emoji)}
-                                        >
-                                            {emoji}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <label>Or Upload Custom Profile Picture</label>
-                                <input type="file" accept="image/*" onChange={handleAvatarUpload} className="file-input" />
-
-                                {customAvatar && (
-                                    <button type="button" className="text-button remove-avatar-btn" onClick={handleRemoveAvatar}>
-                                        Reset to Default Letter
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {/* HISTORY LOG MODAL */}
-                        {activeModal === "history" && (
-                            <div className="modal-body history-body">
-                                <p className="history-intro">
-                                    Displaying all verified donations and activities registered for your <b>{user.role}</b> account.
-                                </p>
-
-                                {userHistory.length === 0 ? (
-                                    <div className="empty-history">No past activity records found for this account.</div>
-                                ) : (
-                                    <div className="history-list">
-                                        {userHistory.map((item) => (
-                                            <div key={item.id} className="history-row">
-                                                <div>
-                                                    <strong>{item.title}</strong>
-                                                    <div className="history-meta">
-                                                        <span>ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â½ {item.quantity} meals</span>
-                                                        <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â {item.location}</span>
-                                                    </div>
-                                                </div>
-                                                <div className="history-right">
-                                                    <span className={`status-pill status-${String(item.status).toLowerCase()}`}>
-                                                        {item.status}
-                                                    </span>
-                                                    <small>{formatISTTime(item.time)}</small>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* SECURITY & PASSWORD MODAL */}
-                        {activeModal === "security" && (
-                            <div className="modal-body">
-                                <form onSubmit={handleChangePasswordSubmit} className="security-form">
-                                    <label>Current Password</label>
-                                    <input
-                                        type="password"
-                                        value={oldPassword}
-                                        onChange={(e) => setOldPassword(e.target.value)}
-                                        placeholder="Enter your current password"
-                                        required
-                                    />
-
-                                    <label>New Password</label>
-                                    <input
-                                        type="password"
-                                        minLength={8}
-                                        maxLength={72}
-                                        value={newPasswordVal}
-                                        onChange={(e) => setNewPasswordVal(e.target.value)}
-                                        placeholder="Enter your new secure password"
-                                        required
-                                    />
-
-                                    <PasswordRequirements password={newPasswordVal} />
-
-                                    <label>Confirm New Password</label>
-                                    <input
-                                        type="password"
-                                        minLength={8}
-                                        maxLength={72}
-                                        value={confirmNewPasswordVal}
-                                        onChange={(e) => setConfirmNewPasswordVal(e.target.value)}
-                                        placeholder="Re-enter your new password"
-                                        required
-                                    />
-
-                                    <button className="primary submit-large" type="submit">
-                                        Update Password
-                                    </button>
-                                </form>
-
-                                {changePasswordMsg && (
-                                    <div className="msg" role="status">
-                                        {changePasswordMsg}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <button
+                            type="button"
+                            className="text-button remove-avatar-btn"
+                            onClick={() => {
+                                setUserAvatar("");
+                                localStorage.removeItem("user_avatar");
+                            }}
+                        >
+                            Reset to initials
+                        </button>
                     </div>
                 </div>
             )}
 
-            <main>
-                {!user ? (
-                    showResetPassword ? (
-                        <section className="login-card verification-card">
-                            <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â</div>
-                            </div>
-                            <div className="eyebrow">ACCOUNT SECURITY</div>
-                            <h2>Create a new password</h2>
-                            {resetTokenChecking ? (
-                                <p>Checking your password reset link...</p>
-                            ) : resetPasswordMessage &&
-                              (resetPasswordMessage.toLowerCase().includes("invalid") ||
-                                  resetPasswordMessage.toLowerCase().includes("expired")) ? (
-                                <>
-                                    <p className="msg">{resetPasswordMessage}</p>
-                                    <button type="button" className="primary submit-large" onClick={openForgotPassword}>
-                                        Request a new link
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <p>Choose a new password for your SharePlate account.</p>
-                                    <form onSubmit={resetPasswordSubmit}>
-                                        <label>New password</label>
-                                        <input
-                                            type="password"
-                                            minLength={8}
-                                            maxLength={72}
-                                            value={resetPassword}
-                                            onChange={(event) => setResetPassword(event.target.value)}
-                                            placeholder="Enter your new password"
-                                            required
-                                        />
-
-                                        <PasswordRequirements password={resetPassword} />
-
-                                        <label>Confirm new password</label>
-                                        <input
-                                            type="password"
-                                            minLength={8}
-                                            maxLength={72}
-                                            value={resetConfirmPassword}
-                                            onChange={(event) => setResetConfirmPassword(event.target.value)}
-                                            placeholder="Re-enter your new password"
-                                            required
-                                        />
-                                        <button
-                                            className="primary submit-large"
-                                            type="submit"
-                                            disabled={resetPasswordLoading || resetTokenChecking}
-                                        >
-                                            {resetPasswordLoading ? "Updating password..." : "Reset Password"}
-                                        </button>
-                                    </form>
-                                    {resetPasswordMessage && (
-                                        <div className="msg" role="status">
-                                            {resetPasswordMessage}
-                                        </div>
-                                    )}
-                                    <div className="auth-footer-nav">
-                                        <button type="button" className="text-button" onClick={openLogin}>
-                                            ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to sign in
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </section>
-                    ) : showForgotPassword ? (
-                        <section className="login-card verification-card">
-                            <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â°</div>
-                            </div>
-                            <div className="eyebrow">ACCOUNT RECOVERY</div>
-                            <h2>Forgot your password?</h2>
-                            <p>
-                                Enter the email address linked to your SharePlate account. If an account
-                                exists, we'll send you a secure password reset link.
-                            </p>
-                            <form onSubmit={requestPasswordReset}>
-                                <label>Email</label>
-                                <input
-                                    type="email"
-                                    value={forgotPasswordEmail}
-                                    onChange={(event) => setForgotPasswordEmail(event.target.value)}
-                                    placeholder="Enter your email"
-                                    required
-                                />
-                                <button
-                                    className="primary submit-large"
-                                    type="submit"
-                                    disabled={forgotPasswordLoading}
-                                >
-                                    {forgotPasswordLoading ? "Sending reset link..." : "Send Reset Link"}
-                                </button>
-                            </form>
-                            {forgotPasswordMessage && (
-                                <div className="msg" role="status">
-                                    {forgotPasswordMessage}
-                                </div>
-                            )}
-                            <div className="auth-footer-nav">
-                                <button type="button" className="text-button" onClick={openLogin}>
-                                    ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to sign in
-                                </button>
-                            </div>
-                        </section>
-                    ) : showVerification ? (
-                        <section className="login-card verification-card">
-                            <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â°</div>
-                            </div>
-                            <div className="eyebrow">ONE SMALL STEP</div>
-                            <h2>Verify your email</h2>
-                            <p>
-                                We've sent a 6-digit verification code to{" "}
-                                <strong className="verification-email">{verificationEmail}</strong>
-                            </p>
-                            <form onSubmit={verifyEmail} className="verification-form">
-                                <div
-                                    className="otp-grid"
-                                    onPaste={(event) => {
-                                        event.preventDefault();
-                                        const pasted = event.clipboardData
-                                            .getData("text")
-                                            .replace(/\D/g, "")
-                                            .slice(0, 6);
-                                        if (!pasted) return;
-                                        const next = ["", "", "", "", "", ""];
-                                        pasted.split("").forEach((digit, index) => {
-                                            next[index] = digit;
-                                        });
-                                        setVerificationCode(next);
-                                        document
-                                            .getElementById(`verification-${Math.min(pasted.length, 5)}`)
-                                            ?.focus();
-                                    }}
-                                >
-                                    {verificationCode.map((digit, index) => (
-                                        <input
-                                            key={index}
-                                            id={`verification-${index}`}
-                                            className="otp-input"
-                                            type="text"
-                                            inputMode="numeric"
-                                            autoComplete={index === 0 ? "one-time-code" : "off"}
-                                            maxLength="1"
-                                            value={digit}
-                                            onChange={(event) => updateVerificationDigit(index, event.target.value)}
-                                            onKeyDown={(event) => handleVerificationKeyDown(event, index)}
-                                            aria-label={`Verification digit ${index + 1}`}
-                                        />
-                                    ))}
-                                </div>
-                                <button
-                                    className="primary submit-large"
-                                    type="submit"
-                                    disabled={verificationLoading}
-                                >
-                                    {verificationLoading ? "Verifying..." : "Verify Email"}
-                                </button>
-                            </form>
-                            {verificationMessage && (
-                                <div className="msg" role="status">
-                                    {verificationMessage}
-                                </div>
-                            )}
-                            <div className="verification-resend">
-                                <span>Didn't receive the code?</span>
-                                <button
-                                    type="button"
-                                    onClick={resendVerification}
-                                    disabled={resendLoading || resendCooldown > 0}
-                                >
-                                    {resendLoading
-                                        ? "Sending..."
-                                        : resendCooldown > 0
-                                        ? `Resend in ${resendCooldown}s`
-                                        : "Resend code"}
-                                </button>
-                            </div>
-                            <div className="auth-footer-nav">
-                                <button type="button" className="text-button" onClick={openLogin}>
-                                    ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to sign in
-                                </button>
-                            </div>
-                        </section>
-                    ) : showSignup ? (
-                        <section className="login-card">
-                            <div className="eyebrow">JOIN SHAREPLATE</div>
-                            <h2>Create your account</h2>
-                            <p>Join SharePlate and help rescue surplus food.</p>
-
-                            <form onSubmit={register}>
-                                <label>Full name</label>
-                                <input
-                                    type="text"
-                                    value={signupName}
-                                    onChange={(event) => setSignupName(event.target.value)}
-                                    placeholder="Enter your name"
-                                    required
-                                />
-
-                                <label>Email</label>
-                                <input
-                                    type="email"
-                                    value={signupEmail}
-                                    onChange={(event) => setSignupEmail(event.target.value)}
-                                    placeholder="Enter your email"
-                                    required
-                                />
-
-                                <label>Phone number (for delivery coordination)</label>
-                                <input
-                                    type="tel"
-                                    value={signupPhone}
-                                    onChange={(event) => setSignupPhone(event.target.value)}
-                                    placeholder="e.g. 9876543210 or +91 9876543210"
-                                    required
-                                />
-                                <small className="field-hint">
-                                    Your phone number should look like: 10-digit mobile (e.g. 9876543210)
-                                </small>
-
-                                <label>Password</label>
-                                <input
-                                    type="password"
-                                    value={signupPassword}
-                                    onChange={(event) => setSignupPassword(event.target.value)}
-                                    placeholder="Create a password"
-                                    required
-                                />
-
-                                <PasswordRequirements password={signupPassword} />
-
-                                <label>Confirm password</label>
-                                <input
-                                    type="password"
-                                    value={signupConfirmPassword}
-                                    onChange={(event) => setSignupConfirmPassword(event.target.value)}
-                                    placeholder="Re-enter your password"
-                                    required
-                                />
-
-                                <label>I want to join as</label>
-                                <select
-                                    value={signupRole}
-                                    onChange={(event) => setSignupRole(event.target.value)}
-                                    required
-                                >
-                                    <option value="DONOR">Donor</option>
-                                    <option value="NGO">NGO</option>
-                                    <option value="VOLUNTEER">Volunteer (Delivery Partner)</option>
-                                </select>
-
-                                <button className="primary submit-large" type="submit" disabled={signupLoading}>
-                                    {signupLoading ? "Creating account..." : "Create Account"}
-                                </button>
-                            </form>
-
-                            {signupMessage && <div className="msg">{signupMessage}</div>}
-
-                            <div className="auth-footer-nav">
-                                <span>Already have an account?</span>
-                                <button type="button" className="text-link-button" onClick={openLogin}>
-                                    Sign in
-                                </button>
-                            </div>
-                        </section>
-                    ) : (
-                        <section className="login-card">
-                            <div className="eyebrow">WELCOME BACK</div>
-                            <h2>Welcome to SharePlate</h2>
-                            <p>Sign in to continue rescue operations.</p>
-
-                            <form onSubmit={login}>
-                                <label>Email</label>
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={(event) => setEmail(event.target.value)}
-                                    placeholder="Enter your email"
-                                    required
-                                />
-
-                                <div className="password-header-row">
-                                    <label>Password</label>
-                                    <button type="button" className="inline-forgot-link" onClick={openForgotPassword}>
-                                        Forgot password?
-                                    </button>
-                                </div>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(event) => setPassword(event.target.value)}
-                                    placeholder="Enter your password"
-                                    required
-                                />
-
-                                <button className="primary submit-large" type="submit" disabled={loading}>
-                                    {loading ? "Signing in..." : "Sign In"}
-                                </button>
-                            </form>
-
-                            {loginMessage && <div className="msg">{loginMessage}</div>}
-
-                            <div className="auth-footer-nav">
-                                <span>Don't have an account?</span>
-                                <button type="button" className="text-link-button" onClick={openSignup}>
-                                    Create an account
-                                </button>
-                            </div>
-                        </section>
-                    )
-                ) : (
-                    <>
-                        {/* HERO BANNER WITH METRICS */}
-                        <section className="hero modern-hero">
-                            <div>
-                                <div className="eyebrow">PLATFORM TELEMETRY</div>
-                                <h2>Rescue more. Waste less.</h2>
-                                <p>
-                                    Connecting surplus food directly with verified organizations and volunteer drivers across the region.
-                                </p>
-                            </div>
-
-                            <div className="metrics-strip">
-                                <div className="metric-box">
-                                    <span className="metric-value">{stats.totalMeals}</span>
-                                    <span className="metric-label">Meals Listed</span>
-                                </div>
-                                <div className="metric-box">
-                                    <span className="metric-value">{stats.activeRescues}</span>
-                                    <span className="metric-label">In Rescue</span>
-                                </div>
-                                <div className="metric-box highlight">
-                                    <span className="metric-value">{stats.deliveredCount}</span>
-                                    <span className="metric-label">Delivered</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        {user.role === "DONOR" && (
-                            <>
-                                <section className="form-card">
-                                    <div className="section-heading">
-                                        <div>
-                                            <div className="eyebrow">DONOR CONSOLE</div>
-                                            <h2>Post Surplus Food</h2>
-                                        </div>
-                                    </div>
-
-                                    <form onSubmit={postFood}>
-                                        <div className="form-split">
-                                            <div>
-                                                <label>Food name</label>
-                                                <input
-                                                    value={foodName}
-                                                    onChange={(event) => setFoodName(event.target.value)}
-                                                    placeholder="Example: Vegetable Rice & Dal"
-                                                    required
-                                                />
-                                            </div>
-                                            <div>
-                                                <label>Quantity in meals</label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={quantity}
-                                                    onChange={(event) => setQuantity(event.target.value)}
-                                                    placeholder="Example: 25"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="form-split">
-                                            <div>
-                                                <div className="label-with-action">
-                                                    <label>Pickup location</label>
-                                                    <button
-                                                        type="button"
-                                                        className="gps-btn"
-                                                        onClick={handleGetDonorLocation}
-                                                        disabled={locatingDonor}
-                                                    >
-                                                        ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â {locatingDonor ? "Locating..." : "Use Current GPS"}
-                                                    </button>
-                                                </div>
-                                                <input
-                                                    value={location}
-                                                    onChange={(event) => setLocation(event.target.value)}
-                                                    placeholder="Address or click GPS button"
-                                                    required
-                                                />
-                                                {listingCoords.lat && (
-                                                    <small className="field-hint gps-active">
-                                                        ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
-                                                    </small>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <label>Pickup deadline</label>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={pickupDeadline}
-                                                    min={getDeadlineBounds().min}
-                                                    max={getDeadlineBounds().max}
-                                                    onChange={(event) => {
-                                                        setPickupDeadline(event.target.value);
-                                                        const error = validatePickupDeadline(event.target.value);
-                                                        if (error) setMsg(error);
-                                                        else if (msg) setMsg("");
-                                                    }}
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <small className="field-hint">
-                                            Choose a pickup time at least 30 minutes from now and within the next 7 days.
-                                        </small>
-
-                                        <label>Description</label>
-                                        <textarea
-                                            value={description}
-                                            onChange={(event) => setDescription(event.target.value)}
-                                            placeholder="Describe the items, containers, or packaging..."
-                                        />
-
-                                        <label>Safety & Storage details</label>
-                                        <textarea
-                                            value={safetyDetails}
-                                            onChange={(event) => setSafetyDetails(event.target.value)}
-                                            placeholder="Prepared time, temperature requirements, allergens..."
-                                        />
-
-                                        <button className="primary submit-large" type="submit" disabled={posting}>
-                                            {posting ? "Publishing Donation..." : "Publish Food Listing"}
-                                        </button>
-                                    </form>
-                                </section>
-
-                                {donorOwnTasks.length > 0 && (
-                                    <section className="form-card">
-                                        <div className="section-heading">
-                                            <div>
-                                                <div className="eyebrow">HANDOVER SECURITY</div>
-                                                <h2>Your Pickup Codes</h2>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid">
-                                            {donorOwnTasks.map((task) => {
-                                                const listing = listings.find(
-                                                    (item) => Number(item.id) === Number(task.listingId)
-                                                );
-                                                const code = pickupCodes[task.id];
-
-                                                return (
-                                                    <article key={task.id} className="code-card">
-                                                        <div className="top">
-                                                            <h3>{listing?.foodName || `Pickup Task #${task.id}`}</h3>
-                                                            <span className="status-badge">{task.status}</span>
-                                                        </div>
-
-                                                        <div className="details listing-details">
-                                                            <div>Task #{task.id}</div>
-                                                            <div>Listing #{task.listingId}</div>
-                                                        </div>
-
-                                                        {/* SWIGGY/ZOMATO VOLUNTEER CONTACT ON DONOR CARD */}
-                                                        {task.volunteerName && (
-                                                            <div className="delivery-contact-banner">
-                                                                <div>
-                                                                    <strong>ÃƒÂ°Ã…Â¸Ã…Â¡Ã‚Â´ Assigned Driver:</strong> {task.volunteerName}
-                                                                </div>
-                                                                {task.volunteerPhone && (
-                                                                    <a href={`tel:${task.volunteerPhone}`} className="call-btn">
-                                                                        ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¾ Call Driver ({task.volunteerPhone})
-                                                                    </a>
-                                                                )}
-                                                            </div>
-                                                        )}
-
-                                                        <div className="verification-box pickup-box">
-                                                            <div>
-                                                                <strong>Pickup Handover Code</strong>
-                                                                <small>Share this code with the volunteer driver upon food collection.</small>
-                                                            </div>
-
-                                                            <div className="code-interactive-group">
-                                                                <div className="code-value">
-                                                                    {code || (codeLoading[`pickup-${task.id}`] ? "Loading..." : "Unavailable")}
-                                                                </div>
-                                                                {code && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="copy-chip"
-                                                                        onClick={() => copyCode(code, `pickup-${task.id}`)}
-                                                                    >
-                                                                        {copiedCodeKey === `pickup-${task.id}` ? "Copied! ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "Copy Code"}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </article>
-                                                );
-                                            })}
-                                        </div>
-                                    </section>
-                                )}
-                            </>
-                        )}
-
-                        {user.role === "NGO" && (
-                            <section className="form-card">
-                                <div className="section-heading">
-                                    <div>
-                                        <div className="eyebrow">NGO COORDINATION</div>
-                                        <h2>Coordinate Food Rescue</h2>
-                                    </div>
-                                </div>
-
-                                <p>Claim available surplus listings and assign online volunteers for immediate collection.</p>
-
-                                <h3>Active Online Volunteers</h3>
-
-                                {volunteers.length === 0 ? (
-                                    <p className="empty-sub">No volunteers are currently online/available. Volunteers will appear here as soon as they switch to "Online (On Duty)".</p>
-                                ) : (
-                                    <div className="grid">
-                                        {volunteers.map((volunteer) => (
-                                            <article key={volunteer.id} className="volunteer-card">
-                                                <div className="avatar-chip mini">{volunteer.name.charAt(0)}</div>
-                                                <div>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                        <h3>{volunteer.name}</h3>
-                                                        <span className="online-tag">ÃƒÂ¢Ã¢â‚¬â€Ã‚Â ONLINE</span>
-                                                    </div>
-                                                    <div className="details mini-details">
-                                                        <div>ID: #{volunteer.id}</div>
-                                                        <div>{volunteer.email}</div>
-                                                        {volunteer.phone && (
-                                                            <div>
-                                                                ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¾ <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
-                                                            </div>
-                                                        )}
-                                                        <div className={`verified-state ${volunteer.verified ? "yes" : "no"}`}>
-                                                            {volunteer.verified ? "Verified Volunteer ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "Pending Verification"}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </article>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {ngoTasks.length > 0 && (
-                                    <div className="task-code-list">
-                                        <h3>Active Rescue Tasks & Delivery Codes</h3>
-
-                                        <div className="grid">
-                                            {ngoTasks
-                                                .filter((task) => {
-                                                    const listing = listings.find(
-                                                        (item) => Number(item.id) === Number(task.listingId)
-                                                    );
-                                                    return listing && Number(listing.claimedByNgoId) === Number(user.id);
-                                                })
-                                                .map((task) => {
-                                                    const listing = listings.find(
-                                                        (item) => Number(item.id) === Number(task.listingId)
-                                                    );
-                                                    const assignedVolunteer = getVolunteer(task.volunteerId);
-                                                    const code = deliveryCodes[task.id];
-
-                                                    return (
-                                                        <article key={task.id} className="code-card">
-                                                            <div className="top">
-                                                                <h3>{listing?.foodName || `Task #${task.id}`}</h3>
-                                                                <span className="status-badge">{task.status}</span>
-                                                            </div>
-
-                                                            <div className="details">
-                                                                <div>Volunteer: <b>{task.volunteerName || assignedVolunteer?.name || `ID #${task.volunteerId}`}</b></div>
-                                                                {task.volunteerPhone && (
-                                                                    <div>
-                                                                        ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¾ Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
-                                                                    </div>
-                                                                )}
-                                                                {task.donorPhone && (
-                                                                    <div>
-                                                                        ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¾ Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
-                                                                    </div>
-                                                                )}
-                                                                <div>Task #{task.id}</div>
-                                                            </div>
-
-                                                            {/* DRIVING LOCATION TELEMETRY */}
-                                                            {task.volunteerLatitude && task.volunteerLongitude && (
-                                                                <div className="driver-loc-card">
-                                                                    <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Volunteer Live Driving GPS:</span>
-                                                                    <a
-                                                                        href={`https://www.google.com/maps?q=${task.volunteerLatitude},${task.volunteerLongitude}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="map-link-btn"
-                                                                    >
-                                                                        View Driver Live on Maps ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â€
-                                                                    </a>
-                                                                </div>
-                                                            )}
-
-                                                            <div className="verification-box delivery-box">
-                                                                <div>
-                                                                    <strong>Delivery Verification Code</strong>
-                                                                    <small>Give this code to the volunteer when meals arrive.</small>
-                                                                </div>
-
-                                                                <div className="code-interactive-group">
-                                                                    <div className="code-value">
-                                                                        {code || (codeLoading[`delivery-${task.id}`] ? "Loading..." : "Unavailable")}
-                                                                    </div>
-                                                                    {code && (
-                                                                        <button
-                                                                            type="button"
-                                                                            className="copy-chip"
-                                                                            onClick={() => copyCode(code, `delivery-${task.id}`)}
-                                                                        >
-                                                                            {copiedCodeKey === `delivery-${task.id}` ? "Copied! ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "Copy Code"}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </article>
-                                                    );
-                                                })}
-                                        </div>
-                                    </div>
-                                )}
-                            </section>
-                        )}
-
-                        {user.role === "VOLUNTEER" && (
-                            <section className="form-card">
-                                <div className="section-heading">
-                                    <div>
-                                        <div className="eyebrow">VOLUNTEER MISSIONS</div>
-                                        <h2>My Pickup & Delivery Tasks</h2>
-                                    </div>
-                                </div>
-
-                                {taskMessage && <div className="msg">{taskMessage}</div>}
-
-                                {tasks.length === 0 ? (
-                                    <p className="empty-sub">No pickup tasks currently assigned to you. Make sure your status above is set to <b>Online</b> so NGOs can assign rescues to you.</p>
-                                ) : (
-                                    <div className="grid">
-                                        {tasks.map((task) => (
-                                            <article key={task.id} className="task-card">
-                                                <div className="top">
-                                                    <h3>Pickup Task #{task.id}</h3>
-                                                    <span className={`status-pill status-${String(task.status).toLowerCase()}`}>
-                                                        {task.status}
-                                                    </span>
-                                                </div>
-
-                                                <div className="details">
-                                                    <div>Listing ID: <b>#{task.listingId}</b></div>
-                                                    <div>Collected at: <b>{formatISTTime(task.collectedAt)}</b></div>
-                                                    <div>Delivered at: <b>{formatISTTime(task.deliveredAt)}</b></div>
-                                                </div>
-
-                                                {/* SWIGGY/ZOMATO CONTACT & NAVIGATION COMPONENT */}
-                                                <div className="delivery-ops-panel">
-                                                    {task.donorPhone && (
-                                                        <div className="contact-row">
-                                                            <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¾ Donor:</span>
-                                                            <a href={`tel:${task.donorPhone}`} className="call-btn-small">
-                                                                Call Donor ({task.donorPhone})
-                                                            </a>
-                                                        </div>
-                                                    )}
-                                                    {task.ngoPhone && (
-                                                        <div className="contact-row">
-                                                            <span>ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¢ NGO Hub:</span>
-                                                            <a href={`tel:${task.ngoPhone}`} className="call-btn-small">
-                                                                Call NGO ({task.ngoPhone})
-                                                            </a>
-                                                        </div>
-                                                    )}
-
-                                                    {/* TURN-BY-TURN DRIVING LINK */}
-                                                    {task.pickupLatitude && task.pickupLongitude ? (
-                                                        <a
-                                                            href={`https://www.google.com/maps/dir/?api=1&destination=${task.pickupLatitude},${task.pickupLongitude}`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="nav-btn-gmaps"
-                                                        >
-                                                            ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Open Google Maps Driving Directions
-                                                        </a>
-                                                    ) : task.pickupAddress ? (
-                                                        <a
-                                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.pickupAddress)}`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="nav-btn-gmaps"
-                                                        >
-                                                            ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚ÂºÃƒÂ¯Ã‚Â¸Ã‚Â Search Pickup Address in Maps
-                                                        </a>
-                                                    ) : null}
-                                                </div>
-
-                                                {task.status === "ASSIGNED" && (
-                                                    <div className="action-box">
-                                                        <label>Step 1: Enter Donor Pickup Code</label>
-                                                        <input
-                                                            type="text"
-                                                            maxLength="6"
-                                                            inputMode="numeric"
-                                                            value={handoverCodes[task.id] || ""}
-                                                            onChange={(event) => updateHandoverCode(task.id, event.target.value)}
-                                                            placeholder="Enter 6-digit pickup code"
-                                                        />
-                                                        <button className="primary submit-large" onClick={() => collectTask(task.id)}>
-                                                            Confirm & Mark Collected
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {task.status === "COLLECTED" && (
-                                                    <div className="action-box">
-                                                        <label>Step 2: Enter NGO Delivery Code</label>
-                                                        <input
-                                                            type="text"
-                                                            maxLength="6"
-                                                            inputMode="numeric"
-                                                            value={handoverCodes[task.id] || ""}
-                                                            onChange={(event) => updateHandoverCode(task.id, event.target.value)}
-                                                            placeholder="Enter 6-digit delivery code"
-                                                        />
-                                                        <button className="primary submit-large" onClick={() => deliverTask(task.id)}>
-                                                            Confirm & Mark Delivered
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {task.status === "DELIVERED" && (
-                                                    <div className="success-box">
-                                                        Mission complete! Food safely delivered.
-                                                    </div>
-                                                )}
-                                            </article>
-                                        ))}
-                                    </div>
-                                )}
-                            </section>
-                        )}
-
-                        {msg && <div className="msg">{msg}</div>}
-
-                        {/* LIVE SEARCH & FILTER CONTROLS */}
-                        <div className="controls-bar">
-                            <div className="search-wrap">
-                                <span className="search-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â</span>
-                                <input
-                                    type="text"
-                                    placeholder="Search food items or location..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                                {searchTerm && (
-                                    <button className="clear-search" onClick={() => setSearchTerm("")}>ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢</button>
-                                )}
-                            </div>
-
-                            <div className="filter-tabs">
-                                {["ALL", "AVAILABLE", "CLAIMED", "DELIVERED"].map((tab) => (
-                                    <button
-                                        key={tab}
-                                        type="button"
-                                        className={`tab-btn ${statusFilter === tab ? "active" : ""}`}
-                                        onClick={() => setStatusFilter(tab)}
-                                    >
-                                        {tab.charAt(0) + tab.slice(1).toLowerCase()}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <button className="refresh-pill" onClick={refreshAll}>
-                                <span>ÃƒÂ¢Ã¢â‚¬Â Ã‚Â»</span> Refresh
+            {/* RESCUE HISTORY MODAL */}
+            {showHistoryModal && (
+                <div className="modal-backdrop">
+                    <div className="modal-card">
+                        <div className="modal-header">
+                            <h3>Activity & Rescue Log</h3>
+                            <button type="button" className="close-drawer" onClick={() => setShowHistoryModal(false)}>
+                                {"\u2715"}
                             </button>
                         </div>
+                        <p className="history-intro">Completed deliveries, pickups, and verified food rescues.</p>
 
-                        {/* LISTINGS GRID */}
-                        <section className="grid">
-                            {filteredListings.length ? (
-                                filteredListings.map((listing) => {
-                                    const existingTask = getTaskForListing(listing.id);
-                                    const assignedVolunteer = existingTask
-                                        ? getVolunteer(existingTask.volunteerId)
-                                        : null;
-
-                                    const listingTask =
-                                        donorTasks.find((task) => Number(task.listingId) === Number(listing.id)) ||
-                                        ngoTasks.find((task) => Number(task.listingId) === Number(listing.id)) ||
-                                        tasks.find((task) => Number(task.listingId) === Number(listing.id));
-                                    const isCompleted = listingTask?.status === "DELIVERED";
-                                    const isOwnDonorListing =
-                                        user.role === "DONOR" && Number(listing.donorId) === Number(user.id);
-
-                                    return (
-                                        <article
-                                            key={listing.id}
-                                            className={`listing-card modern-card ${
-                                                isCompleted
-                                                    ? "listing-completed"
-                                                    : `status-${String(listing.status || "").toLowerCase()}`
-                                            }`}
-                                        >
-                                            <div className="listing-card-glow" />
-                                            <div className="top listing-top">
-                                                <div>
-                                                    <div className="listing-kicker">
-                                                        {isCompleted ? "RESCUE COMPLETE" : "SURPLUS FOOD"}
-                                                    </div>
-                                                    <h3>{listing.foodName}</h3>
-                                                </div>
-                                                <div className="status-stack">
-                                                    <span
-                                                        className={`status-pill status-${String(
-                                                            isCompleted ? "DELIVERED" : listing.status || ""
-                                                        ).toLowerCase()}`}
-                                                    >
-                                                        <i aria-hidden="true">
-                                                            {isCompleted ? "ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : listing.status === "AVAILABLE" ? "ÃƒÂ¢Ã¢â‚¬â€Ã‚Â" : "ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â€"}
-                                                        </i>
-                                                        {isCompleted ? "DELIVERED" : listing.status}
-                                                    </span>
-                                                    {!isCompleted && getUrgencyBadge(listing.pickupDeadline)}
-                                                </div>
-                                            </div>
-
-                                            <p className="listing-description">
-                                                {listing.description || "No specific storage details provided."}
-                                            </p>
-
-                                            <div className="details meta-card">
-                                                <div>
-                                                    <span>ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â½</span> <strong>{listing.quantity}</strong> meals prepared
-                                                </div>
-                                                <div>
-                                                    <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â</span> {listing.location}
-                                                    {listing.latitude && (
-                                                        <span className="gps-verified-tag">GPS ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“</span>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <span>ÃƒÂ¢Ã‚ÂÃ‚Â°</span> Deadline: {formatISTTime(listing.pickupDeadline)}
-                                                </div>
-                                            </div>
-
-                                            {/* DONOR PICKUP CODE BADGE */}
-                                            {isOwnDonorListing && listing.pickupCode && (
-                                                <div className="donor-code-pill">
-                                                    <span>Donor Pickup Code:</span>
-                                                    <strong>{listing.pickupCode}</strong>
-                                                </div>
-                                            )}
-
-                                            {isCompleted && (
-                                                <div className="impact-seal" role="status" aria-label="Food successfully delivered">
-                                                    <div className="seal-mark">ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“</div>
-                                                    <div className="seal-copy">
-                                                        <strong>Successfully delivered</strong>
-                                                        <span>
-                                                            {user?.role === "DONOR" && "Your surplus food reached families in need."}
-                                                            {user?.role === "NGO" && "Great coordination! You turned surplus into nourishment."}
-                                                            {user?.role === "VOLUNTEER" && "Direct impact delivered! Thank you for going the distance."}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {isOwnDonorListing && listingTask && !isCompleted && (
-                                                <div className="listing-progress">
-                                                    <div className="progress-label">
-                                                        <span>Rescue in progress</span>
-                                                        <strong>{listingTask.status}</strong>
-                                                    </div>
-                                                    <div className="progress-track">
-                                                        <span
-                                                            className="progress-fill"
-                                                            style={{
-                                                                width:
-                                                                    listingTask.status === "COLLECTED"
-                                                                        ? "78%"
-                                                                        : listingTask.status === "ASSIGNED"
-                                                                        ? "52%"
-                                                                        : "34%",
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <small>Your surplus food is actively being rescued.</small>
-                                                </div>
-                                            )}
-
-                                            {listing.status === "AVAILABLE" && user.role === "NGO" && (
-                                                <button
-                                                    className="primary submit-large"
-                                                    onClick={() => handleClaimClick(listing.id)}
-                                                >
-                                                    Claim for NGO
-                                                </button>
-                                            )}
-
-                                            {listing.status === "CLAIMED" &&
-                                                user.role === "NGO" &&
-                                                (existingTask ? (
-                                                    <div className="assignment-box">
-                                                        <h4>ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Volunteer Assigned</h4>
-                                                        <p>Volunteer: <b>{assignedVolunteer ? assignedVolunteer.name : "Assigned"}</b></p>
-                                                        <p>Volunteer ID: #{existingTask.volunteerId}</p>
-                                                        <button disabled className="assigned-pill">
-                                                            ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Assigned to Delivery
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="assignment-box">
-                                                        <h4>Assign Online Field Volunteer</h4>
-                                                        <select
-                                                            value={selectedVolunteers[listing.id] || ""}
-                                                            onChange={(event) =>
-                                                                selectVolunteer(listing.id, event.target.value)
-                                                            }
-                                                        >
-                                                            <option value="">Select an available volunteer</option>
-                                                            {volunteers.map((volunteer) => (
-                                                                <option key={volunteer.id} value={volunteer.id}>
-                                                                    {volunteer.name} (ID #{volunteer.id})
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <button
-                                                            className="primary submit-large"
-                                                            onClick={() => assignVolunteer(listing.id)}
-                                                            disabled={assigningListing === listing.id || !volunteers.length}
-                                                        >
-                                                            {assigningListing === listing.id ? "Assigning..." : "Assign Volunteer"}
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                        </article>
-                                    );
-                                })
-                            ) : (
-                                <div className="empty modern-empty">
-                                    <span className="empty-icon">ÃƒÂ°Ã…Â¸Ã‚ÂÃ†â€™</span>
-                                    <h3>No food listings match your criteria</h3>
-                                    <p>Check back shortly or post a surplus food listing to get started.</p>
+                        <div className="history-list">
+                            {tasks.filter(t => t.status === "DELIVERED" || t.status === "COMPLETED").map((t) => (
+                                <div key={t.id} className="history-row">
+                                    <div>
+                                        <strong>{t.foodTitle}</strong>
+                                        <div className="history-meta">
+                                            <span>Task #{t.id}</span>
+                                            <span>Donor: {t.donorPhone || "Shared"}</span>
+                                        </div>
+                                    </div>
+                                    <div className="history-right">
+                                        <span className="status-pill status-delivered">{"\u2713"} Delivered</span>
+                                    </div>
                                 </div>
+                            ))}
+                            {tasks.filter(t => t.status === "DELIVERED" || t.status === "COMPLETED").length === 0 && (
+                                <div className="empty-history">No past rescues completed yet.</div>
                             )}
-                        </section>
-                    </>
-                )}
-            </main>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ADMIN NGO VERIFICATION MODAL */}
+            {showAdminModal && (
+                <div className="modal-backdrop">
+                    <div className="modal-card">
+                        <div className="modal-header">
+                            <h3>NGO Audit & Approval Portal</h3>
+                            <button type="button" className="close-drawer" onClick={() => setShowAdminModal(false)}>
+                                {"\u2715"}
+                            </button>
+                        </div>
+                        <p className="history-intro">Review pending NGO registration credentials and assign operational clearance.</p>
+
+                        {adminMessage && <div className="msg">{adminMessage}</div>}
+
+                        <div className="history-list">
+                            {pendingNgos.map((ngo) => (
+                                <div key={ngo.id} className="history-row">
+                                    <div>
+                                        <strong>{ngo.name}</strong>
+                                        <div className="history-meta">
+                                            <span>{ngo.email}</span>
+                                            <span>Phone: {ngo.phone || "N/A"}</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                        <button
+                                            type="button"
+                                            className="gps-btn"
+                                            onClick={() => handleVerifyNgo(ngo.id, true)}
+                                        >
+                                            Approve
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="text-button remove-avatar-btn"
+                                            onClick={() => handleVerifyNgo(ngo.id, false)}
+                                        >
+                                            Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            {pendingNgos.length === 0 && (
+                                <div className="empty-history">No pending NGOs awaiting review.</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* HERO BANNER */}
+            <section className="modern-hero">
+                <div>
+                    <span className="eyebrow">{user.role} DASHBOARD</span>
+                    <h2>Hello, {user.name} {"\u{1F44B}"}</h2>
+                    <p>Coordinate surplus rescue, minimize city food waste, and support urgent relief efforts.</p>
+                </div>
+                <div className="metrics-strip">
+                    <div className="metric-box highlight">
+                        <span className="metric-value">{listings.length}</span>
+                        <span className="metric-label">Listings</span>
+                    </div>
+                    <div className="metric-box">
+                        <span className="metric-value">{tasks.length}</span>
+                        <span className="metric-label">Active Tasks</span>
+                    </div>
+                </div>
+            </section>
+
+            {locationStatus && <div className="msg">{locationStatus}</div>}
+
+            {/* ROLE: DONOR VIEW */}
+            {user.role === "DONOR" && (
+                <>
+                    <section className="form-card">
+                        <h3>Publish Surplus Food Donation</h3>
+                        <form onSubmit={createListing}>
+                            <div className="form-split">
+                                <div>
+                                    <label>Food Item / Title</label>
+                                    <input
+                                        type="text"
+                                        value={foodTitle}
+                                        onChange={(e) => setFoodTitle(e.target.value)}
+                                        placeholder="e.g. 50 Packs of Cooked Meals"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label>Quantity (Portions / Servings)</label>
+                                    <input
+                                        type="number"
+                                        value={foodQuantity}
+                                        onChange={(e) => setFoodQuantity(e.target.value)}
+                                        placeholder="50"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <label>Description & Expiry Details</label>
+                            <textarea
+                                value={foodDescription}
+                                onChange={(e) => setFoodDescription(e.target.value)}
+                                placeholder="Prepared at 1:00 PM, good until 8:00 PM. Hygienically packed."
+                                rows="2"
+                            />
+
+                            <div className="label-with-action">
+                                <label>Pickup Location Address</label>
+                                <button type="button" className="gps-btn" onClick={captureDonorGps}>
+                                    {"\u{1F4CD}"} Use Current GPS
+                                </button>
+                            </div>
+                            <input
+                                type="text"
+                                value={foodAddress}
+                                onChange={(e) => setFoodAddress(e.target.value)}
+                                placeholder="Full street address, landmark, floor"
+                                required
+                            />
+                            {foodGpsStatus && <small className="field-hint gps-active">{foodGpsStatus}</small>}
+
+                            <button type="submit" className="submit-large primary">
+                                Publish Surplus Food
+                            </button>
+                        </form>
+                    </section>
+
+                    <div className="controls-bar">
+                        <div className="search-wrap">
+                            <span className="search-icon">{"\u{1F50D}"}</span>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search by title or address..."
+                            />
+                            {searchQuery && (
+                                <button type="button" className="clear-search" onClick={() => setSearchQuery("")}>
+                                    {"\u2715"}
+                                </button>
+                            )}
+                        </div>
+                        <button type="button" className="refresh-pill" onClick={fetchListings}>
+                            {"\u21BB"} Refresh
+                        </button>
+                    </div>
+
+                    <div className="grid">
+                        {filteredListings.map((l) => (
+                            <article key={l.id} className="modern-card">
+                                <div>
+                                    <span className="listing-kicker">DONATION #{l.id}</span>
+                                    <div className="top">
+                                        <h3>{l.title}</h3>
+                                        <span className={`status-pill status-${l.status.toLowerCase()}`}>{l.status}</span>
+                                    </div>
+                                    <p className="listing-description">{l.description}</p>
+                                    <div className="meta-card">
+                                        <div>{"\u{1F4E6}"} <strong>Quantity:</strong> {l.quantity} portions</div>
+                                        <div>{"\u{1F4CD}"} <strong>Address:</strong> {l.address}</div>
+                                    </div>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* ROLE: NGO VIEW */}
+            {user.role === "NGO" && (
+                <>
+                    <div className="controls-bar">
+                        <div className="search-wrap">
+                            <span className="search-icon">{"\u{1F50D}"}</span>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search available donations..."
+                            />
+                        </div>
+                        <div className="filter-tabs">
+                            {["ALL", "AVAILABLE", "CLAIMED"].map((tab) => (
+                                <button
+                                    key={tab}
+                                    type="button"
+                                    className={`tab-btn ${filterTab === tab ? "active" : ""}`}
+                                    onClick={() => setFilterTab(tab)}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <h3>Available Surplus Donations</h3>
+                    <div className="grid">
+                        {filteredListings.filter(l => l.status === "AVAILABLE").map((l) => (
+                            <article key={l.id} className="modern-card">
+                                <div>
+                                    <span className="listing-kicker">AVAILABLE SURPLUS</span>
+                                    <div className="top">
+                                        <h3>{l.title}</h3>
+                                        <span className="status-pill status-available">AVAILABLE</span>
+                                    </div>
+                                    <p className="listing-description">{l.description}</p>
+                                    <div className="meta-card">
+                                        <div>{"\u{1F4E6}"} <strong>Quantity:</strong> {l.quantity} servings</div>
+                                        <div>{"\u{1F4CD}"} <strong>Pickup:</strong> {l.address}</div>
+                                        <div>{"\u{1F464}"} <strong>Donor:</strong> {l.donorName}</div>
+                                    </div>
+
+                                    {l.donorPhone && (
+                                        <div className="delivery-contact-banner">
+                                            <span>Donor Contact: <strong>{l.donorPhone}</strong></span>
+                                            <a href={`tel:${l.donorPhone}`} className="call-btn">
+                                                {"\u{1F4DE}"} Call Donor
+                                            </a>
+                                        </div>
+                                    )}
+
+                                    <div className="delivery-ops-panel">
+                                        <label>Dispatch Volunteer:</label>
+                                        <select
+                                            value={selectedVolunteer[l.id] || ""}
+                                            onChange={(e) => setSelectedVolunteer({ ...selectedVolunteer, [l.id]: e.target.value })}
+                                        >
+                                            <option value="">Choose On-Duty Volunteer</option>
+                                            {availableVolunteers.map((v) => (
+                                                <option key={v.id} value={v.id}>
+                                                    {v.name} ({v.phone || "No phone"}) - {v.isOnline ? "\u{1F7E2} Online" : "Offline"}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            className="submit-large primary"
+                                            onClick={() => assignVolunteer(l.id)}
+                                            disabled={!selectedVolunteer[l.id]}
+                                        >
+                                            Confirm & Dispatch Task
+                                        </button>
+                                    </div>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+
+                    <h3 style={{ marginTop: "32px" }}>Active Rescues & Deliveries</h3>
+                    <div className="grid">
+                        {tasks.map((t) => (
+                            <article key={t.id} className="task-card">
+                                <div>
+                                    <span className="listing-kicker">TASK #{t.id}</span>
+                                    <div className="top">
+                                        <h3>{t.foodTitle}</h3>
+                                        <span className="status-pill status-assigned">{t.status}</span>
+                                    </div>
+                                    <div className="meta-card">
+                                        <div>{"\u{1F6F5}"} <strong>Volunteer:</strong> {t.volunteerName} ({t.volunteerPhone || "No contact"})</div>
+                                        <div>{"\u{1F4CD}"} <strong>Pickup Address:</strong> {t.pickupAddress}</div>
+                                    </div>
+                                    <div className="donor-code-pill">
+                                        <span>Delivery Confirmation PIN:</span>
+                                        <strong>{t.pickupCode}</strong>
+                                    </div>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* ROLE: VOLUNTEER VIEW */}
+            {user.role === "VOLUNTEER" && (
+                <>
+                    <h3>Assigned Rescues</h3>
+                    <div className="grid">
+                        {tasks.map((t) => (
+                            <article key={t.id} className="task-card">
+                                <div>
+                                    <span className="listing-kicker">PICKUP #{t.id}</span>
+                                    <div className="top">
+                                        <h3>{t.foodTitle}</h3>
+                                        <span className={`status-pill status-${t.status.toLowerCase()}`}>{t.status}</span>
+                                    </div>
+
+                                    <div className="meta-card">
+                                        <div>{"\u{1F4CD}"} <strong>Address:</strong> {t.pickupAddress}</div>
+                                    </div>
+
+                                    <div className="delivery-ops-panel">
+                                        {t.donorPhone && (
+                                            <div className="contact-row">
+                                                <span>Donor: <strong>{t.donorPhone}</strong></span>
+                                                <a href={`tel:${t.donorPhone}`} className="call-btn-small">
+                                                    {"\u{1F4DE}"} Call Donor
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        {t.latitude && t.longitude && (
+                                            <a
+                                                href={`https://www.google.com/maps/dir/?api=1&destination=${t.latitude},${t.longitude}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="nav-btn-gmaps"
+                                            >
+                                                {"\u{1F5FA}\uFE0F"} Open Driving Directions in Google Maps
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    {t.status === "ASSIGNED" && (
+                                        <div className="verification-box">
+                                            <div>
+                                                <strong>Confirm Delivery PIN</strong>
+                                                <small>Ask the donor/recipient for the 4-digit PIN</small>
+                                            </div>
+                                            <div className="code-interactive-group">
+                                                <input
+                                                    type="text"
+                                                    maxLength="4"
+                                                    className="code-value"
+                                                    value={pickupCodeInput[t.id] || ""}
+                                                    onChange={(e) => setPickupCodeInput({ ...pickupCodeInput, [t.id]: e.target.value })}
+                                                    placeholder="0000"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="submit-large primary"
+                                                    onClick={() => confirmDeliveryWithOtp(t.id)}
+                                                >
+                                                    Verify & Complete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* ROLE: ADMIN VIEW */}
+            {user.role === "ADMIN" && (
+                <>
+                    <h3>Platform Operations & Audit</h3>
+                    <section className="form-card">
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <h4>NGO Partner Clearances</h4>
+                                <p style={{ color: "var(--sp-text-muted)", fontSize: "13px" }}>
+                                    Manage charity and shelter access tokens to ensure legitimate food rescue operations.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="submit-large primary"
+                                style={{ width: "auto", margin: 0 }}
+                                onClick={() => setShowAdminModal(true)}
+                            >
+                                Open NGO Review Queue ({pendingNgos.length})
+                            </button>
+                        </div>
+                    </section>
+                </>
+            )}
         </div>
     );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+);
