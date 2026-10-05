@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+﻿import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
@@ -56,19 +56,19 @@ function PasswordRequirements({ password }) {
             <span className="checklist-title">Password must contain:</span>
             <ul>
                 <li className={rules.length ? "valid" : ""}>
-                    <i>{rules.length ? "✓" : "○"}</i> 8 to 72 characters
+                    <i>{rules.length ? "âœ“" : "â—‹"}</i> 8 to 72 characters
                 </li>
                 <li className={rules.upper ? "valid" : ""}>
-                    <i>{rules.upper ? "✓" : "○"}</i> At least 1 uppercase letter (A-Z)
+                    <i>{rules.upper ? "âœ“" : "â—‹"}</i> At least 1 uppercase letter (A-Z)
                 </li>
                 <li className={rules.lower ? "valid" : ""}>
-                    <i>{rules.lower ? "✓" : "○"}</i> At least 1 lowercase letter (a-z)
+                    <i>{rules.lower ? "âœ“" : "â—‹"}</i> At least 1 lowercase letter (a-z)
                 </li>
                 <li className={rules.digit ? "valid" : ""}>
-                    <i>{rules.digit ? "✓" : "○"}</i> At least 1 digit (0-9)
+                    <i>{rules.digit ? "âœ“" : "â—‹"}</i> At least 1 digit (0-9)
                 </li>
                 <li className={rules.special ? "valid" : ""}>
-                    <i>{rules.special ? "✓" : "○"}</i> At least 1 special character (!@#$%...)
+                    <i>{rules.special ? "âœ“" : "â—‹"}</i> At least 1 special character (!@#$%...)
                 </li>
             </ul>
         </div>
@@ -322,466 +322,21 @@ function App() {
 
             fetch(`${API}/users/validate-reset-token?token=${encodeURIComponent(token)}`)
                 .then(async (response) => {
-                    if (!response.ok) {
-                        let message = "This password reset link is invalid or expired.";
-                        try {
-                            const data = await response.json();
-                            message = data.error || data.message || message;
-                        } catch {}
-                        throw new Error(message);
-                    }
-                })
-                .catch((error) => {
-                    setResetPasswordMessage(error.message || "This password reset link is invalid or expired.");
-                })
-                .finally(() => setResetTokenChecking(false));
-        }
-    }, []);
-
-    const clearResetRoute = () => {
-        if (window.location.pathname === "/reset-password") {
-            window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-        }
-    };
-
-    const copyCode = (code, key) => {
-        if (!code || code === "Loading..." || code === "Unavailable") return;
-        navigator.clipboard.writeText(code).then(() => {
-            setCopiedCodeKey(key);
-            setTimeout(() => setCopiedCodeKey(null), 2000);
-        });
-    };
-
-    const handleAvatarSelect = (emoji) => {
-        setCustomAvatar(emoji);
-        localStorage.setItem("shareplate_avatar", emoji);
-    };
-
-    const handleAvatarUpload = (e) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setCustomAvatar(reader.result);
-                localStorage.setItem("shareplate_avatar", reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleRemoveAvatar = () => {
-        setCustomAvatar("");
-        localStorage.removeItem("shareplate_avatar");
-    };
-
-    const handleChangePasswordSubmit = (e) => {
-        e.preventDefault();
-        setChangePasswordMsg("");
-
-        if (newPasswordVal !== confirmNewPasswordVal) {
-            setChangePasswordMsg("New passwords do not match.");
-            return;
-        }
-
-        if (!isPasswordStrong(newPasswordVal)) {
-            setChangePasswordMsg("Password does not meet the security criteria.");
-            return;
-        }
-
-        setChangePasswordMsg("Password updated successfully.");
-        setOldPassword("");
-        setNewPasswordVal("");
-        setConfirmNewPasswordVal("");
-    };
-
-    const submitNgoVerification = async (e) => {
-        e.preventDefault();
-        setNgoVerifyLoading(true);
-        setNgoVerifyMsg("");
-
-        try {
-            const response = await authFetch(`${API}/users/${user.id}/verify-ngo`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ darpanId, phone: ngoPhone }),
-            });
-
-            if (!response.ok) {
-                let err = "Verification failed. Check your Darpan ID & Phone.";
-                try {
-                    const data = await response.json();
-                    err = data.message || data.error || err;
-                } catch {}
-                throw new Error(err);
-            }
-
-            setUser((prev) => ({ ...prev, ngoVerified: true }));
-            setActiveModal(null);
-            setNgoVerifyMsg("");
-
-            if (pendingClaimListingId) {
-                await executeClaim(pendingClaimListingId);
-                setPendingClaimListingId(null);
-            } else {
-                setMsg("NGO verified successfully! You can now claim surplus food listings.");
-            }
-        } catch (error) {
-            setNgoVerifyMsg(error.message || "Could not complete verification.");
-        } finally {
-            setNgoVerifyLoading(false);
-        }
-    };
-
-    const openForgotPassword = () => {
-        setShowSignup(false);
-        setShowVerification(false);
-        setShowForgotPassword(true);
-        setShowResetPassword(false);
-        setForgotPasswordEmail(email.trim());
-        setForgotPasswordMessage("");
-        setLoginMessage("");
-    };
-
-    const openLogin = () => {
-        setShowSignup(false);
-        setShowVerification(false);
-        setShowForgotPassword(false);
-        setShowResetPassword(false);
-        setSignupMessage("");
-        setForgotPasswordMessage("");
-        setResetPasswordMessage("");
-        setLoginMessage("");
-        clearResetRoute();
-    };
-
-    const requestPasswordReset = async (event) => {
-        event.preventDefault();
-        setForgotPasswordLoading(true);
-        setForgotPasswordMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/forgot-password`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: forgotPasswordEmail.trim() }),
-            });
-
-            let message = "If an account exists for this email, a password reset link has been sent.";
-            try {
-                const data = await response.json();
-                message = data.message || data.error || message;
-            } catch {}
-
-            if (!response.ok) throw new Error(message);
-            setForgotPasswordMessage(message);
-        } catch (error) {
-            setForgotPasswordMessage(error.message || "Could not process the password reset request.");
-        } finally {
-            setForgotPasswordLoading(false);
-        }
-    };
-
-    const resetPasswordSubmit = async (event) => {
-        event.preventDefault();
-
-        if (resetPassword !== resetConfirmPassword) {
-            setResetPasswordMessage("Passwords do not match.");
-            return;
-        }
-
-        if (!isPasswordStrong(resetPassword)) {
-            setResetPasswordMessage("Please fulfill all password requirements below.");
-            return;
-        }
-
-        setResetPasswordLoading(true);
-        setResetPasswordMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/reset-password`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    token: resetToken,
-                    newPassword: resetPassword,
-                    confirmPassword: resetConfirmPassword,
-                }),
-            });
-
-            let message = "Password reset successfully. You can now log in.";
-            try {
-                const data = await response.json();
-                message = data.message || data.error || message;
-            } catch {}
-
-            if (!response.ok) throw new Error(message);
-
-            setResetPassword("");
-            setResetConfirmPassword("");
-            setEmail("");
-            setPassword("");
-            setResetPasswordMessage("");
-            clearResetRoute();
-            setShowResetPassword(false);
-            setLoginMessage("Password reset successfully. You can now sign in.");
-        } catch (error) {
-            setResetPasswordMessage(error.message || "Could not reset your password.");
-        } finally {
-            setResetPasswordLoading(false);
-        }
-    };
-
-    const loadListings = async () => {
-        try {
-            const response = await authFetch(`${API}/listings`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setListings(data);
-        } catch {
-            setMsg("Start the Spring Boot backend first.");
-        }
-    };
-
-    const loadTasks = async (volunteerId) => {
-        try {
-            const response = await authFetch(`${API}/tasks/volunteer/${volunteerId}`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setTasks(data);
-        } catch {
-            setTaskMessage("Could not load your pickup tasks.");
-        }
-    };
-
-    const loadAllTasksForDonor = async () => {
-        try {
-            const response = await authFetch(`${API}/tasks`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setDonorTasks(data);
-        } catch {
-            setMsg("Could not load your pickup assignments.");
-        }
-    };
-
-    const loadVolunteers = async () => {
-        try {
-            const response = await authFetch(`${API}/users/volunteers`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setVolunteers(data);
-        } catch {
-            setMsg("Could not load volunteers.");
-        }
-    };
-
-    const loadNgoTasks = async () => {
-        try {
-            const response = await authFetch(`${API}/tasks`);
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            setNgoTasks(data);
-        } catch {
-            setMsg("Could not load pickup assignments.");
-        }
-    };
-
-    useEffect(() => {
-        if (user) loadListings();
-    }, [user]);
-
-    useEffect(() => {
-        if (!user) {
-            setTasks([]);
-            setDonorTasks([]);
-            setVolunteers([]);
-            setNgoTasks([]);
-            return;
-        }
-
-        if (user.role === "VOLUNTEER") loadTasks(user.id);
-        if (user.role === "DONOR") loadAllTasksForDonor();
-        if (user.role === "NGO") {
-            loadVolunteers();
-            loadNgoTasks();
-        }
-    }, [user]);
-
-    // DONOR: load pickup codes
-    useEffect(() => {
-        if (user?.role !== "DONOR") {
-            setPickupCodes({});
-            return;
-        }
-
-        const ownListingIds = new Set(
-            listings
-                .filter((listing) => Number(listing.donorId) === Number(user.id))
-                .map((listing) => Number(listing.id))
-        );
-
-        const relevantTasks = donorTasks.filter((task) =>
-            ownListingIds.has(Number(task.listingId))
-        );
-
-        const fetchCodes = async () => {
-            for (const task of relevantTasks) {
-                if (pickupCodes[task.id]) continue;
-
-                try {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`pickup-${task.id}`]: true,
-                    }));
-
-                    const response = await authFetch(`${API}/tasks/${task.id}/pickup-code`);
-                    if (!response.ok) continue;
-
-                    const data = await response.json();
-                    setPickupCodes((previous) => ({
-                        ...previous,
-                        [task.id]: data.code,
-                    }));
-                } catch {
-                } finally {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`pickup-${task.id}`]: false,
-                    }));
-                }
-            }
-        };
-
-        if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, donorTasks]);
-
-    // NGO: load delivery codes
-    useEffect(() => {
-        if (user?.role !== "NGO") {
-            setDeliveryCodes({});
-            return;
-        }
-
-        const relevantTasks = ngoTasks.filter((task) => {
-            const listing = listings.find((item) => Number(item.id) === Number(task.listingId));
-            return listing && Number(listing.claimedByNgoId) === Number(user.id);
-        });
-
-        const fetchCodes = async () => {
-            for (const task of relevantTasks) {
-                if (deliveryCodes[task.id]) continue;
-
-                try {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`delivery-${task.id}`]: true,
-                    }));
-
-                    const response = await authFetch(`${API}/tasks/${task.id}/delivery-code`);
-                    if (!response.ok) continue;
-
-                    const data = await response.json();
-                    setDeliveryCodes((previous) => ({
-                        ...previous,
-                        [task.id]: data.code,
-                    }));
-                } catch {
-                } finally {
-                    setCodeLoading((previous) => ({
-                        ...previous,
-                        [`delivery-${task.id}`]: false,
-                    }));
-                }
-            }
-        };
-
-        if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, ngoTasks]);
-
-    // LOGIN
-    const login = async (event) => {
-        event.preventDefault();
-        setLoading(true);
-        setLoginMessage("");
-
-        try {
-            const response = await fetch(`${API}/users/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-            });
-
-            if (!response.ok) {
-                let errorMessage = "Invalid email or password.";
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorData.message || errorMessage;
-                } catch {}
-                throw new Error(errorMessage);
-            }
-
-            const authResponse = await response.json();
-            localStorage.setItem("shareplate_token", authResponse.token);
-            setUser(authResponse.user);
-            setPassword("");
-        } catch (error) {
-            const message = error?.message || "";
-            if (message.toLowerCase().includes("verify your email")) {
-                setVerificationEmail(email.trim());
-                setVerificationCode(["", "", "", "", "", ""]);
-                setVerificationMessage("Please verify your email before signing in.");
-                setShowVerification(true);
-            } else {
-                setLoginMessage("Invalid email or password.");
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // SIGNUP
-    const register = async (event) => {
-        event.preventDefault();
-        setSignupMessage("");
-
-        if (signupPassword !== signupConfirmPassword) {
-            setSignupMessage("Passwords do not match.");
-            return;
-        }
-
-        if (!isPasswordStrong(signupPassword)) {
-            setSignupMessage("Please fulfill all password requirements below.");
-            return;
-        }
-
-        setSignupLoading(true);
-
-        try {
-            const response = await fetch(`${API}/users/register`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: signupName.trim(),
-                    email: signupEmail.trim(),
-                    phone: signupPhone.trim(),
-                    password: signupPassword,
-                    role: signupRole,
-                }),
-            });
-
-            if (!response.ok) {
+                                if (!response.ok) {
                 let errorMessage = "Could not create account.";
                 try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.message || errorData.error || errorMessage;
-                } catch {
-                    const errorText = await response.text();
-                    if (errorText) errorMessage = errorText;
-                }
+                    const text = await response.text();
+                    try {
+                        const errorData = JSON.parse(text);
+                        errorMessage = errorData.message || errorData.error || errorMessage;
+                    } catch {
+                        if (text) errorMessage = text;
+                    }
+                } catch {}
                 throw new Error(errorMessage);
             }
 
-            await response.json();
+            const data = await response.json();
 
             const registeredEmail = signupEmail.trim().toLowerCase();
             setVerificationEmail(registeredEmail);
@@ -1262,8 +817,8 @@ function App() {
                 return {
                     id: t.id,
                     title: listing?.foodName || `Pickup Task #${t.id}`,
-                    quantity: listing?.quantity || "–",
-                    location: listing?.location || "–",
+                    quantity: listing?.quantity || "â€“",
+                    location: listing?.location || "â€“",
                     status: t.status,
                     time: t.deliveredAt || t.collectedAt || "Pending",
                 };
@@ -1276,10 +831,10 @@ function App() {
         if (!deadlineStr) return null;
         const diffMs = new Date(deadlineStr).getTime() - Date.now();
         const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffMs <= 0) return <span className="urgency-badge expired">⚠ Expired</span>;
-        if (diffHrs < 3) return <span className="urgency-badge critical">🔥 &lt;3h left</span>;
-        if (diffHrs < 12) return <span className="urgency-badge urgent">⏱ {diffHrs}h left</span>;
-        return <span className="urgency-badge calm">⏱ {diffHrs}h left</span>;
+        if (diffMs <= 0) return <span className="urgency-badge expired">âš  Expired</span>;
+        if (diffHrs < 3) return <span className="urgency-badge critical">ðŸ”¥ &lt;3h left</span>;
+        if (diffHrs < 12) return <span className="urgency-badge urgent">â± {diffHrs}h left</span>;
+        return <span className="urgency-badge calm">â± {diffHrs}h left</span>;
     };
 
     const renderAvatarDisplay = (size = "normal") => {
@@ -1297,7 +852,7 @@ function App() {
             {/* TOP NAVIGATION BAR */}
             <header className="main-header">
                 <div className="brand-group">
-                    <div className="brand-icon">🍲</div>
+                    <div className="brand-icon">ðŸ²</div>
                     <div>
                         <h1>SharePlate</h1>
                         <p>Surplus food rescue & coordination</p>
@@ -1325,7 +880,7 @@ function App() {
                         onClick={toggleTheme}
                         aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
                     >
-                        {theme === "dark" ? "☀ Light" : "☾ Dark"}
+                        {theme === "dark" ? "â˜€ Light" : "â˜¾ Dark"}
                     </button>
 
                     {user && (
@@ -1353,7 +908,7 @@ function App() {
                     <aside className={`menu-drawer ${menuOpen ? "open" : ""}`}>
                         <div className="drawer-header">
                             <h3>Account & Navigation</h3>
-                            <button className="close-drawer" onClick={() => setMenuOpen(false)}>✕</button>
+                            <button className="close-drawer" onClick={() => setMenuOpen(false)}>âœ•</button>
                         </div>
 
                         <div className="drawer-user-info" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
@@ -1362,34 +917,34 @@ function App() {
                                 <strong>{user.name}</strong>
                                 <small>{user.email}</small>
                                 <span className="role-tag">
-                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "✓ Verified" : "• Pending")}
+                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "âœ“ Verified" : "â€¢ Pending")}
                                 </span>
                             </div>
                         </div>
 
                         <div className="drawer-nav">
                             <div className="nav-item active" onClick={() => setMenuOpen(false)}>
-                                <span>📋</span> Active Dashboard
+                                <span>ðŸ“‹</span> Active Dashboard
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("history"); }}>
-                                <span>📜</span> Rescue Activity History
+                                <span>ðŸ“œ</span> Rescue Activity History
                             </div>
                             {user.role === "NGO" && !user.ngoVerified && (
                                 <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("ngo-verify"); }}>
-                                    <span>🛡️</span> Complete NGO Verification
+                                    <span>ðŸ›¡ï¸</span> Complete NGO Verification
                                 </div>
                             )}
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
-                                <span>👤</span> Profile & Avatar
+                                <span>ðŸ‘¤</span> Profile & Avatar
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("security"); }}>
-                                <span>🔒</span> Security & Password
+                                <span>ðŸ”’</span> Security & Password
                             </div>
                             <div className="nav-item" onClick={() => { setMenuOpen(false); refreshAll(); }}>
-                                <span>🔄</span> Refresh Platform Data
+                                <span>ðŸ”„</span> Refresh Platform Data
                             </div>
                             <div className="nav-item" onClick={toggleTheme}>
-                                <span>🌓</span> Theme: <b>{theme === "dark" ? "Dark" : "Light"}</b>
+                                <span>ðŸŒ“</span> Theme: <b>{theme === "dark" ? "Dark" : "Light"}</b>
                             </div>
                         </div>
 
@@ -1413,7 +968,7 @@ function App() {
                                 {activeModal === "security" && "Security & Password Management"}
                                 {activeModal === "ngo-verify" && "NGO Legal Verification"}
                             </h3>
-                            <button className="close-drawer" onClick={() => setActiveModal(null)}>✕</button>
+                            <button className="close-drawer" onClick={() => setActiveModal(null)}>âœ•</button>
                         </div>
 
                         {/* NGO VERIFICATION ONBOARDING MODAL */}
@@ -1474,7 +1029,7 @@ function App() {
 
                                 <label>Choose Avatar Icon</label>
                                 <div className="avatar-preset-grid">
-                                    {["🌱", "🍲", "🌾", "🦸", "🤝", "📦", "🛵", "❤️", "🌟", "✨"].map((emoji) => (
+                                    {["ðŸŒ±", "ðŸ²", "ðŸŒ¾", "ðŸ¦¸", "ðŸ¤", "ðŸ“¦", "ðŸ›µ", "â¤ï¸", "ðŸŒŸ", "âœ¨"].map((emoji) => (
                                         <button
                                             key={emoji}
                                             type="button"
@@ -1513,8 +1068,8 @@ function App() {
                                                 <div>
                                                     <strong>{item.title}</strong>
                                                     <div className="history-meta">
-                                                        <span>🍽 {item.quantity} meals</span>
-                                                        <span>📍 {item.location}</span>
+                                                        <span>ðŸ½ {item.quantity} meals</span>
+                                                        <span>ðŸ“ {item.location}</span>
                                                     </div>
                                                 </div>
                                                 <div className="history-right">
@@ -1588,7 +1143,7 @@ function App() {
                     showResetPassword ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">🔐</div>
+                                <div className="verification-icon">ðŸ”</div>
                             </div>
                             <div className="eyebrow">ACCOUNT SECURITY</div>
                             <h2>Create a new password</h2>
@@ -1645,7 +1200,7 @@ function App() {
                                     )}
                                     <div className="auth-footer-nav">
                                         <button type="button" className="text-button" onClick={openLogin}>
-                                            ← Back to sign in
+                                            â† Back to sign in
                                         </button>
                                     </div>
                                 </>
@@ -1654,7 +1209,7 @@ function App() {
                     ) : showForgotPassword ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">✉</div>
+                                <div className="verification-icon">âœ‰</div>
                             </div>
                             <div className="eyebrow">ACCOUNT RECOVERY</div>
                             <h2>Forgot your password?</h2>
@@ -1686,14 +1241,14 @@ function App() {
                             )}
                             <div className="auth-footer-nav">
                                 <button type="button" className="text-button" onClick={openLogin}>
-                                    ← Back to sign in
+                                    â† Back to sign in
                                 </button>
                             </div>
                         </section>
                     ) : showVerification ? (
                         <section className="login-card verification-card">
                             <div className="verification-hero" aria-hidden="true">
-                                <div className="verification-icon">✉</div>
+                                <div className="verification-icon">âœ‰</div>
                             </div>
                             <div className="eyebrow">ONE SMALL STEP</div>
                             <h2>Verify your email</h2>
@@ -1766,7 +1321,7 @@ function App() {
                             </div>
                             <div className="auth-footer-nav">
                                 <button type="button" className="text-button" onClick={openLogin}>
-                                    ← Back to sign in
+                                    â† Back to sign in
                                 </button>
                             </div>
                         </section>
@@ -1966,7 +1521,7 @@ function App() {
                                                         onClick={handleGetDonorLocation}
                                                         disabled={locatingDonor}
                                                     >
-                                                        📍 {locatingDonor ? "Locating..." : "Use Current GPS"}
+                                                        ðŸ“ {locatingDonor ? "Locating..." : "Use Current GPS"}
                                                     </button>
                                                 </div>
                                                 <input
@@ -1977,7 +1532,7 @@ function App() {
                                                 />
                                                 {listingCoords.lat && (
                                                     <small className="field-hint gps-active">
-                                                        ✓ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
+                                                        âœ“ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
                                                     </small>
                                                 )}
                                             </div>
@@ -2055,11 +1610,11 @@ function App() {
                                                         {task.volunteerName && (
                                                             <div className="delivery-contact-banner">
                                                                 <div>
-                                                                    <strong>🚴 Assigned Driver:</strong> {task.volunteerName}
+                                                                    <strong>ðŸš´ Assigned Driver:</strong> {task.volunteerName}
                                                                 </div>
                                                                 {task.volunteerPhone && (
                                                                     <a href={`tel:${task.volunteerPhone}`} className="call-btn">
-                                                                        📞 Call Driver ({task.volunteerPhone})
+                                                                        ðŸ“ž Call Driver ({task.volunteerPhone})
                                                                     </a>
                                                                 )}
                                                             </div>
@@ -2081,7 +1636,7 @@ function App() {
                                                                         className="copy-chip"
                                                                         onClick={() => copyCode(code, `pickup-${task.id}`)}
                                                                     >
-                                                                        {copiedCodeKey === `pickup-${task.id}` ? "Copied! ✓" : "Copy Code"}
+                                                                        {copiedCodeKey === `pickup-${task.id}` ? "Copied! âœ“" : "Copy Code"}
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -2118,18 +1673,18 @@ function App() {
                                                 <div>
                                                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                                         <h3>{volunteer.name}</h3>
-                                                        <span className="online-tag">● ONLINE</span>
+                                                        <span className="online-tag">â— ONLINE</span>
                                                     </div>
                                                     <div className="details mini-details">
                                                         <div>ID: #{volunteer.id}</div>
                                                         <div>{volunteer.email}</div>
                                                         {volunteer.phone && (
                                                             <div>
-                                                                📞 <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
+                                                                ðŸ“ž <a href={`tel:${volunteer.phone}`} className="phone-link">{volunteer.phone}</a>
                                                             </div>
                                                         )}
                                                         <div className={`verified-state ${volunteer.verified ? "yes" : "no"}`}>
-                                                            {volunteer.verified ? "Verified Volunteer ✓" : "Pending Verification"}
+                                                            {volunteer.verified ? "Verified Volunteer âœ“" : "Pending Verification"}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2168,12 +1723,12 @@ function App() {
                                                                 <div>Volunteer: <b>{task.volunteerName || assignedVolunteer?.name || `ID #${task.volunteerId}`}</b></div>
                                                                 {task.volunteerPhone && (
                                                                     <div>
-                                                                        📞 Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
+                                                                        ðŸ“ž Volunteer Phone: <a href={`tel:${task.volunteerPhone}`} className="phone-link">{task.volunteerPhone}</a>
                                                                     </div>
                                                                 )}
                                                                 {task.donorPhone && (
                                                                     <div>
-                                                                        📞 Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
+                                                                        ðŸ“ž Donor Phone: <a href={`tel:${task.donorPhone}`} className="phone-link">{task.donorPhone}</a>
                                                                     </div>
                                                                 )}
                                                                 <div>Task #{task.id}</div>
@@ -2182,14 +1737,14 @@ function App() {
                                                             {/* DRIVING LOCATION TELEMETRY */}
                                                             {task.volunteerLatitude && task.volunteerLongitude && (
                                                                 <div className="driver-loc-card">
-                                                                    <span>📍 Volunteer Live Driving GPS:</span>
+                                                                    <span>ðŸ“ Volunteer Live Driving GPS:</span>
                                                                     <a
                                                                         href={`https://www.google.com/maps?q=${task.volunteerLatitude},${task.volunteerLongitude}`}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                         className="map-link-btn"
                                                                     >
-                                                                        View Driver Live on Maps ↗
+                                                                        View Driver Live on Maps â†—
                                                                     </a>
                                                                 </div>
                                                             )}
@@ -2210,7 +1765,7 @@ function App() {
                                                                             className="copy-chip"
                                                                             onClick={() => copyCode(code, `delivery-${task.id}`)}
                                                                         >
-                                                                            {copiedCodeKey === `delivery-${task.id}` ? "Copied! ✓" : "Copy Code"}
+                                                                            {copiedCodeKey === `delivery-${task.id}` ? "Copied! âœ“" : "Copy Code"}
                                                                         </button>
                                                                     )}
                                                                 </div>
@@ -2258,7 +1813,7 @@ function App() {
                                                 <div className="delivery-ops-panel">
                                                     {task.donorPhone && (
                                                         <div className="contact-row">
-                                                            <span>📞 Donor:</span>
+                                                            <span>ðŸ“ž Donor:</span>
                                                             <a href={`tel:${task.donorPhone}`} className="call-btn-small">
                                                                 Call Donor ({task.donorPhone})
                                                             </a>
@@ -2266,7 +1821,7 @@ function App() {
                                                     )}
                                                     {task.ngoPhone && (
                                                         <div className="contact-row">
-                                                            <span>🏢 NGO Hub:</span>
+                                                            <span>ðŸ¢ NGO Hub:</span>
                                                             <a href={`tel:${task.ngoPhone}`} className="call-btn-small">
                                                                 Call NGO ({task.ngoPhone})
                                                             </a>
@@ -2281,7 +1836,7 @@ function App() {
                                                             rel="noopener noreferrer"
                                                             className="nav-btn-gmaps"
                                                         >
-                                                            🗺️ Open Google Maps Driving Directions
+                                                            ðŸ—ºï¸ Open Google Maps Driving Directions
                                                         </a>
                                                     ) : task.pickupAddress ? (
                                                         <a
@@ -2290,7 +1845,7 @@ function App() {
                                                             rel="noopener noreferrer"
                                                             className="nav-btn-gmaps"
                                                         >
-                                                            🗺️ Search Pickup Address in Maps
+                                                            ðŸ—ºï¸ Search Pickup Address in Maps
                                                         </a>
                                                     ) : null}
                                                 </div>
@@ -2346,7 +1901,7 @@ function App() {
                         {/* LIVE SEARCH & FILTER CONTROLS */}
                         <div className="controls-bar">
                             <div className="search-wrap">
-                                <span className="search-icon">🔍</span>
+                                <span className="search-icon">ðŸ”</span>
                                 <input
                                     type="text"
                                     placeholder="Search food items or location..."
@@ -2354,7 +1909,7 @@ function App() {
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                                 {searchTerm && (
-                                    <button className="clear-search" onClick={() => setSearchTerm("")}>✕</button>
+                                    <button className="clear-search" onClick={() => setSearchTerm("")}>âœ•</button>
                                 )}
                             </div>
 
@@ -2372,7 +1927,7 @@ function App() {
                             </div>
 
                             <button className="refresh-pill" onClick={refreshAll}>
-                                <span>↻</span> Refresh
+                                <span>â†»</span> Refresh
                             </button>
                         </div>
 
@@ -2417,7 +1972,7 @@ function App() {
                                                         ).toLowerCase()}`}
                                                     >
                                                         <i aria-hidden="true">
-                                                            {isCompleted ? "✓" : listing.status === "AVAILABLE" ? "●" : "↗"}
+                                                            {isCompleted ? "âœ“" : listing.status === "AVAILABLE" ? "â—" : "â†—"}
                                                         </i>
                                                         {isCompleted ? "DELIVERED" : listing.status}
                                                     </span>
@@ -2431,16 +1986,16 @@ function App() {
 
                                             <div className="details meta-card">
                                                 <div>
-                                                    <span>🍽</span> <strong>{listing.quantity}</strong> meals prepared
+                                                    <span>ðŸ½</span> <strong>{listing.quantity}</strong> meals prepared
                                                 </div>
                                                 <div>
-                                                    <span>📍</span> {listing.location}
+                                                    <span>ðŸ“</span> {listing.location}
                                                     {listing.latitude && (
-                                                        <span className="gps-verified-tag">GPS ✓</span>
+                                                        <span className="gps-verified-tag">GPS âœ“</span>
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <span>⏰</span> Deadline: {formatISTTime(listing.pickupDeadline)}
+                                                    <span>â°</span> Deadline: {formatISTTime(listing.pickupDeadline)}
                                                 </div>
                                             </div>
 
@@ -2454,7 +2009,7 @@ function App() {
 
                                             {isCompleted && (
                                                 <div className="impact-seal" role="status" aria-label="Food successfully delivered">
-                                                    <div className="seal-mark">✓</div>
+                                                    <div className="seal-mark">âœ“</div>
                                                     <div className="seal-copy">
                                                         <strong>Successfully delivered</strong>
                                                         <span>
@@ -2502,11 +2057,11 @@ function App() {
                                                 user.role === "NGO" &&
                                                 (existingTask ? (
                                                     <div className="assignment-box">
-                                                        <h4>✅ Volunteer Assigned</h4>
+                                                        <h4>âœ… Volunteer Assigned</h4>
                                                         <p>Volunteer: <b>{assignedVolunteer ? assignedVolunteer.name : "Assigned"}</b></p>
                                                         <p>Volunteer ID: #{existingTask.volunteerId}</p>
                                                         <button disabled className="assigned-pill">
-                                                            ✓ Assigned to Delivery
+                                                            âœ“ Assigned to Delivery
                                                         </button>
                                                     </div>
                                                 ) : (
@@ -2539,7 +2094,7 @@ function App() {
                                 })
                             ) : (
                                 <div className="empty modern-empty">
-                                    <span className="empty-icon">🍃</span>
+                                    <span className="empty-icon">ðŸƒ</span>
                                     <h3>No food listings match your criteria</h3>
                                     <p>Check back shortly or post a surplus food listing to get started.</p>
                                 </div>
