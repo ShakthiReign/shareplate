@@ -1,75 +1,92 @@
 package com.shareplate.service;
 
-import com.resend.Resend;
-import com.resend.services.emails.model.CreateEmailOptions;
-import com.resend.services.emails.model.CreateEmailResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 @Service
 public class EmailService {
 
 private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+private final HttpClient httpClient = HttpClient.newHttpClient();
 
-private final Resend resend;
+private final String apiKey;
+private final String senderEmail;
 private final String frontendUrl;
 
 public EmailService(
-@Value("${resend.api-key:${RESEND_API_KEY:}}") String apiKey,
+@Value("${brevo.api-key:${BREVO_API_KEY:}}") String apiKey,
+@Value("${brevo.sender.email:${BREVO_SENDER_EMAIL:shareplate.team@gmail.com}}") String senderEmail,
 @Value("${shareplate.frontend-url:https://shareplate-green.vercel.app}") String frontendUrl) {
-this.resend = new Resend(apiKey);
+this.apiKey = apiKey;
+this.senderEmail = senderEmail;
 this.frontendUrl = frontendUrl;
 }
 
 public void sendVerificationEmail(String recipientEmail, String recipientName, String verificationCode) {
 System.out.println("==================================================================");
 System.out.println(">>> VERIFICATION OTP FOR: " + recipientEmail);
+System.out.println(">>> SENDER: " + senderEmail);
 System.out.println(">>> CODE: " + verificationCode);
 System.out.println("==================================================================");
 
-try {
-CreateEmailOptions params = CreateEmailOptions.builder()
-.from("SharePlate <onboarding@resend.dev>")
-.to(recipientEmail)
-.subject("SharePlate - Verify your email")
-.html("<p>Hi <strong>" + recipientName + "</strong>,</p>"
-+ "<p>Welcome to SharePlate! Your email verification code is:</p>"
-+ "<h2 style='letter-spacing: 4px; color: #16a34a;'>" + verificationCode + "</h2>"
-+ "<p>This code is valid for 10 minutes.</p>")
-.build();
-
-CreateEmailResponse response = resend.emails().send(params);
-log.info("OTP email delivered successfully! Resend ID: {}", response.getId());
-} catch (Exception e) {
-log.error("Resend API rejected delivery (sandbox restriction): {}. OTP was printed above.", e.getMessage());
+String jsonPayload = """
+{
+  "sender": {"name": "SharePlate", "email": "%s"},
+  "to": [{"email": "%s", "name": "%s"}],
+  "subject": "SharePlate - Verify your email",
+  "htmlContent": "<div style='font-family: sans-serif; padding: 20px; color: #111;'><h2 style='color: #16a34a;'>Welcome to SharePlate!</h2><p>Hi %s,</p><p>Use this verification code to complete your signup:</p><h1 style='font-size: 32px; letter-spacing: 5px; color: #16a34a; background: #f0fdf4; display: inline-block; padding: 10px 20px; border-radius: 8px;'>%s</h1><p>This code expires in 10 minutes.</p></div>"
 }
+""".formatted(senderEmail, recipientEmail, recipientName, recipientName, verificationCode);
+
+sendEmailRequest(jsonPayload, recipientEmail);
 }
 
 public void sendPasswordResetEmail(String recipientEmail, String recipientName, String resetToken) {
 String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
 
-System.out.println("==================================================================");
-System.out.println(">>> PASSWORD RESET LINK FOR: " + recipientEmail);
-System.out.println(">>> LINK: " + resetLink);
-System.out.println("==================================================================");
+String jsonPayload = """
+{
+  "sender": {"name": "SharePlate", "email": "%s"},
+  "to": [{"email": "%s", "name": "%s"}],
+  "subject": "SharePlate - Reset your password",
+  "htmlContent": "<div style='font-family: sans-serif; padding: 20px; color: #111;'><h2>Password Reset Request</h2><p>Hi %s,</p><p>Click below to reset your password:</p><p><a href='%s' style='background: #16a34a; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; display: inline-block;'>Reset Password</a></p><p>This link expires in 30 minutes.</p></div>"
+}
+""".formatted(senderEmail, recipientEmail, recipientName, recipientName, resetLink);
+
+sendEmailRequest(jsonPayload, recipientEmail);
+}
+
+private void sendEmailRequest(String jsonPayload, String recipientEmail) {
+if (apiKey == null || apiKey.isBlank()) {
+log.error("BREVO_API_KEY is missing from environment variables!");
+return;
+}
 
 try {
-CreateEmailOptions params = CreateEmailOptions.builder()
-.from("SharePlate <onboarding@resend.dev>")
-.to(recipientEmail)
-.subject("SharePlate - Reset your password")
-.html("<p>Hi <strong>" + recipientName + "</strong>,</p>"
-+ "<p>Click the link below to reset your password:</p>"
-+ "<p><a href='" + resetLink + "'>Reset Password</a></p>"
-+ "<p>This link expires in 30 minutes.</p>")
+HttpRequest request = HttpRequest.newBuilder()
+.uri(URI.create("https://api.brevo.com/v3/smtp/email"))
+.header("accept", "application/json")
+.header("api-key", apiKey.trim())
+.header("content-type", "application/json")
+.POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
 .build();
 
-resend.emails().send(params);
-log.info("Password reset email sent to {}", recipientEmail);
+HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+if (response.statusCode() >= 200 && response.statusCode() < 300) {
+log.info("Brevo email dispatched successfully to {}. Response: {}", recipientEmail, response.body());
+} else {
+log.error("Brevo API error (Status {}): {}", response.statusCode(), response.body());
+}
 } catch (Exception e) {
-log.error("Failed to send password reset: {}. Link was printed above.", e.getMessage());
+log.error("Failed to connect to Brevo API: {}", e.getMessage(), e);
 }
 }
 }
