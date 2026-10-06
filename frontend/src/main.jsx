@@ -2,7 +2,7 @@
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const API = (import.meta.env.VITE_API_URL || "https://shareplate-swa2.onrender.com/api").replace(/\/$/, "");
+const API = "https://shareplate-swa2.onrender.com/api";
 
 const authFetch = async (url, options = {}) => {
     const token = localStorage.getItem("shareplate_token");
