@@ -6,6 +6,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -17,6 +19,13 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    // 1. Provides the missing PasswordEncoder bean required by UserService
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    // 2. Configure endpoint permissions, CORS, and CSRF
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -34,16 +43,17 @@ public class SecurityConfig {
                     "/api/users/reset-password",
                     "/api/users/validate-reset-token"
                 ).permitAll()
-                .anyRequest().permitAll() // Allow testing across active endpoints without default 401 blocks
+                .anyRequest().permitAll()
             );
 
         return http.build();
     }
 
+    // 3. Permissive CORS configuration for Vercel preview/production domains
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*")); // Permissive pattern covers all Vercel preview/production domains
+        config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
