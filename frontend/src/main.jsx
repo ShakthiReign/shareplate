@@ -2,7 +2,7 @@
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const API = "https://shareplate-swa2.onrender.com/api";
+const API = (import.meta.env.VITE_API_URL || "https://shareplate-swa2.onrender.com/api").replace(/\/$/, "");
 
 const authFetch = async (url, options = {}) => {
     const token = localStorage.getItem("shareplate_token");
@@ -82,6 +82,11 @@ function App() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [activeModal, setActiveModal] = useState(null);
 
+    // PHONE VERIFICATION (ALL 3 ROLES)
+    const [setupPhone, setSetupPhone] = useState("");
+    const [phoneVerifyLoading, setPhoneVerifyLoading] = useState(false);
+    const [phoneVerifyMsg, setPhoneVerifyMsg] = useState("");
+
     // NGO VERIFICATION FORM
     const [darpanId, setDarpanId] = useState("");
     const [ngoPhone, setNgoPhone] = useState("");
@@ -109,11 +114,10 @@ function App() {
         return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     });
 
-    // SIGNUP
+    // SIGNUP (Phone removed from initial creation)
     const [showSignup, setShowSignup] = useState(false);
     const [signupName, setSignupName] = useState("");
     const [signupEmail, setSignupEmail] = useState("");
-    const [signupPhone, setSignupPhone] = useState("");
     const [signupPassword, setSignupPassword] = useState("");
     const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
     const [signupRole, setSignupRole] = useState("DONOR");
@@ -179,7 +183,6 @@ function App() {
     const [selectedVolunteers, setSelectedVolunteers] = useState({});
     const [assigningListing, setAssigningListing] = useState(null);
 
-    // GLOBAL THEME APPLICATION
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
         document.body.setAttribute("data-theme", theme);
@@ -198,7 +201,6 @@ function App() {
         return () => window.clearInterval(timer);
     }, [resendCooldown]);
 
-    // LOAD PROFILE TO RESTORE ONLINE STATUS
     useEffect(() => {
         if (!user) return;
         if (user.role === "VOLUNTEER") {
@@ -213,7 +215,6 @@ function App() {
         }
     }, [user]);
 
-    // LIVE DRIVING LOCATION BROADCAST FOR VOLUNTEER
     useEffect(() => {
         if (!user || user.role !== "VOLUNTEER" || !tasks.length) return;
 
@@ -230,13 +231,13 @@ function App() {
                 }).catch(() => {});
             },
             () => {},
-            { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 7000 }
         );
 
         return () => navigator.geolocation.clearWatch(watchId);
     }, [user, tasks]);
 
-    // DONOR LIVE GPS AUTO-DETECT
+    // PRECISE GPS AUTO-DETECT WITH HARDWARE ACCURACY & FALLBACK
     const handleGetDonorLocation = () => {
         if (!navigator.geolocation) {
             setMsg("Geolocation is not supported by your browser.");
@@ -251,27 +252,29 @@ function App() {
                 setListingCoords({ lat, lng });
 
                 try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
                     const data = await res.json();
-                    const road = data.address?.road || data.address?.suburb || data.address?.neighbourhood || "";
-                    const city = data.address?.city || data.address?.town || data.address?.county || "";
-                    const formatted = road ? `${road}, ${city}` : (data.display_name?.slice(0, 50) || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                    const addr = data.address || {};
+                    const street = addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood || addr.village || "";
+                    const area = addr.city_district || addr.city || addr.town || addr.county || "";
+                    const state = addr.state || "";
+                    const parts = [street, area, state].filter(Boolean);
+                    const formatted = parts.length > 0 ? parts.join(", ") : (data.display_name?.slice(0, 60) || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
                     setLocation(formatted);
                 } catch {
-                    setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                    setLocation(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
                 } finally {
                     setLocatingDonor(false);
                 }
             },
             (err) => {
                 setLocatingDonor(false);
-                setMsg("Could not retrieve GPS location: " + err.message);
+                setMsg("Could not retrieve precise GPS: " + err.message + ". Enter address manually if on desktop Wi-Fi.");
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
         );
     };
 
-    // VOLUNTEER ONLINE/OFFLINE TOGGLE
     const toggleOnlineStatus = async () => {
         setTogglingOnline(true);
         const nextStatus = !isOnline;
@@ -300,7 +303,7 @@ function App() {
             navigator.geolocation.getCurrentPosition(
                 (pos) => updateStatusOnServer(pos.coords.latitude, pos.coords.longitude),
                 () => updateStatusOnServer(null, null),
-                { enableHighAccuracy: true }
+                { enableHighAccuracy: true, maximumAge: 0 }
             );
         } else {
             await updateStatusOnServer(null, null);
@@ -394,6 +397,42 @@ function App() {
         setConfirmNewPasswordVal("");
     };
 
+    // PHONE VERIFICATION SUBMIT FOR ANY ROLE
+    const submitPhoneSetup = async (e) => {
+        e.preventDefault();
+        setPhoneVerifyLoading(true);
+        setPhoneVerifyMsg("");
+
+        try {
+            const cleanPhone = setupPhone.replace(/\D/g, "");
+            if (cleanPhone.length !== 10) {
+                throw new Error("Please enter a valid 10-digit mobile number.");
+            }
+
+            const res = await authFetch(`${API}/users/${user.id}/phone`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: cleanPhone }),
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || "Could not save phone number.");
+            }
+
+            setUser(prev => ({ ...prev, phone: cleanPhone }));
+            setPhoneVerifyMsg("Phone number registered successfully! ✓");
+            setTimeout(() => {
+                setActiveModal(null);
+                setPhoneVerifyMsg("");
+            }, 1200);
+        } catch (err) {
+            setPhoneVerifyMsg(err.message || "Failed to update phone number.");
+        } finally {
+            setPhoneVerifyLoading(false);
+        }
+    };
+
     const submitNgoVerification = async (e) => {
         e.preventDefault();
         setNgoVerifyLoading(true);
@@ -415,7 +454,7 @@ function App() {
                 throw new Error(err);
             }
 
-            setUser((prev) => ({ ...prev, ngoVerified: true }));
+            setUser((prev) => ({ ...prev, ngoVerified: true, phone: ngoPhone }));
             setActiveModal(null);
             setNgoVerifyMsg("");
 
@@ -607,7 +646,6 @@ function App() {
         }
     }, [user]);
 
-    // DONOR: load pickup codes
     useEffect(() => {
         if (user?.role !== "DONOR") {
             setPickupCodes({});
@@ -655,7 +693,6 @@ function App() {
         if (relevantTasks.length > 0) fetchCodes();
     }, [user, listings, donorTasks]);
 
-    // NGO: load delivery codes
     useEffect(() => {
         if (user?.role !== "NGO") {
             setDeliveryCodes({});
@@ -698,7 +735,6 @@ function App() {
         if (relevantTasks.length > 0) fetchCodes();
     }, [user, listings, ngoTasks]);
 
-    // LOGIN
     const login = async (event) => {
         event.preventDefault();
         setLoading(true);
@@ -739,7 +775,7 @@ function App() {
         }
     };
 
-    // SIGNUP
+    // REGISTER WITHOUT REQUIRING PHONE UPFRONT
     const register = async (event) => {
         event.preventDefault();
         setSignupMessage("");
@@ -763,7 +799,6 @@ function App() {
                 body: JSON.stringify({
                     name: signupName.trim(),
                     email: signupEmail.trim(),
-                    phone: signupPhone.trim(),
                     password: signupPassword,
                     role: signupRole,
                 }),
@@ -791,7 +826,6 @@ function App() {
             setPassword("");
             setSignupName("");
             setSignupEmail("");
-            setSignupPhone("");
             setSignupPassword("");
             setSignupConfirmPassword("");
             setSignupRole("DONOR");
@@ -948,29 +982,50 @@ function App() {
         return "";
     };
 
+    // FIXED POST FOOD LISTING (ISO TIMESTAMP + DETAILED SERVER ERROR HANDLING)
     const postFood = async (event) => {
         event.preventDefault();
         setPosting(true);
         setMsg("");
 
         try {
+            if (!pickupDeadline) {
+                throw new Error("Please select a pickup deadline.");
+            }
+
+            // Normalizes local datetime-local format into standard ISO-8601 string for Spring Boot
+            const deadlineDate = new Date(pickupDeadline);
+            const isoDeadline = deadlineDate.toISOString();
+
+            const payload = {
+                foodName: foodName.trim(),
+                description: description.trim(),
+                quantity: Number(quantity),
+                location: location.trim(),
+                latitude: listingCoords.lat,
+                longitude: listingCoords.lng,
+                pickupDeadline: isoDeadline,
+                safetyDetails: safetyDetails.trim(),
+                donorId: user.id,
+            };
+
             const response = await authFetch(`${API}/listings`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    foodName,
-                    description,
-                    quantity: Number(quantity),
-                    location,
-                    latitude: listingCoords.lat,
-                    longitude: listingCoords.lng,
-                    pickupDeadline,
-                    safetyDetails,
-                    donorId: user.id,
-                }),
+                body: JSON.stringify(payload),
             });
 
-            if (!response.ok) throw new Error();
+            if (!response.ok) {
+                let errorDetails = "Could not post food listing.";
+                try {
+                    const errorJson = await response.json();
+                    errorDetails = errorJson.message || errorJson.error || errorDetails;
+                } catch {
+                    const text = await response.text();
+                    if (text) errorDetails = text;
+                }
+                throw new Error(errorDetails);
+            }
 
             setFoodName("");
             setDescription("");
@@ -979,10 +1034,10 @@ function App() {
             setListingCoords({ lat: null, lng: null });
             setPickupDeadline("");
             setSafetyDetails("");
-            setMsg("Food listing posted successfully with GPS coordinates.");
+            setMsg("Food listing posted successfully with GPS coordinates! ✓");
             await loadListings();
-        } catch {
-            setMsg("Could not post food listing.");
+        } catch (err) {
+            setMsg(err.message || "Could not post food listing.");
         } finally {
             setPosting(false);
         }
@@ -1359,7 +1414,7 @@ function App() {
                                 <strong>{user.name}</strong>
                                 <small>{user.email}</small>
                                 <span className="role-tag">
-                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "✓ Verified" : "• Pending")}
+                                    {user.role} {user.role === "NGO" && (user.ngoVerified ? "✓ Verified" : "• Pending Verification")}
                                 </span>
                             </div>
                         </div>
@@ -1368,14 +1423,23 @@ function App() {
                             <div className="nav-item active" onClick={() => setMenuOpen(false)}>
                                 <span>📋</span> Active Dashboard
                             </div>
+
+                            {/* "FINISH SET UP YOUR ACCOUNT" PROMPT IN MENU */}
+                            {!user.phone && (
+                                <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("phone-setup"); }}>
+                                    <span>📱</span> Finish Setting Up Phone
+                                </div>
+                            )}
+
+                            {user.role === "NGO" && !user.ngoVerified && (
+                                <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("ngo-verify"); }}>
+                                    <span>🛡️</span> Complete NGO Verification
+                                </div>
+                            )}
+
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("history"); }}>
                                 <span>📜</span> Rescue Activity History
                             </div>
-                            {user.role === "NGO" && !user.ngoVerified && (
-                                <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("ngo-verify"); }}>
-                                    <span>🛡️️</span> Complete NGO Verification
-                                </div>
-                            )}
                             <div className="nav-item" onClick={() => { setMenuOpen(false); setActiveModal("profile"); }}>
                                 <span>👤</span> Profile & Avatar
                             </div>
@@ -1399,21 +1463,57 @@ function App() {
                 </>
             )}
 
-            {/* USER SETTINGS / MODALS */}
+            {/* USER SETTINGS & VERIFICATION MODALS */}
             {activeModal && (
                 <div className="modal-backdrop" onClick={() => setActiveModal(null)}>
                     <div className="modal-card" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3>
+                                {activeModal === "phone-setup" && "Finish Setup: Mobile Verification"}
+                                {activeModal === "ngo-verify" && "NGO Legal Verification"}
                                 {activeModal === "profile" && "Profile & Avatar Customization"}
                                 {activeModal === "history" && `${user.role} Rescue Activity History`}
                                 {activeModal === "security" && "Security & Password Management"}
-                                {activeModal === "ngo-verify" && "NGO Legal Verification"}
                             </h3>
                             <button className="close-drawer" onClick={() => setActiveModal(null)}>✕</button>
                         </div>
 
-                        {/* NGO VERIFICATION ONBOARDING MODAL */}
+                        {/* PHONE SETUP MODAL FOR ALL 3 ROLES */}
+                        {activeModal === "phone-setup" && (
+                            <div className="modal-body">
+                                <p className="history-intro">
+                                    Add your active mobile number to enable direct call coordination between donors, NGOs, and delivery volunteers during rescues.
+                                </p>
+
+                                <form onSubmit={submitPhoneSetup} className="security-form">
+                                    <label>10-Digit Mobile Number</label>
+                                    <input
+                                        type="tel"
+                                        pattern="[0-9]{10}"
+                                        maxLength="10"
+                                        placeholder="e.g. 9876543210"
+                                        value={setupPhone}
+                                        onChange={(e) => setSetupPhone(e.target.value.replace(/\D/g, ""))}
+                                        required
+                                    />
+                                    <small className="field-hint">
+                                        Format: 10-digit phone number (used strictly for food rescue handovers).
+                                    </small>
+
+                                    <button className="primary submit-large" type="submit" disabled={phoneVerifyLoading}>
+                                        {phoneVerifyLoading ? "Saving Number..." : "Save & Complete Verification"}
+                                    </button>
+                                </form>
+
+                                {phoneVerifyMsg && (
+                                    <div className="msg" role="status">
+                                        {phoneVerifyMsg}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* NGO SPECIALIZED VERIFICATION MODAL */}
                         {activeModal === "ngo-verify" && (
                             <div className="modal-body">
                                 <p className="history-intro">
@@ -1465,6 +1565,7 @@ function App() {
                                     <div>
                                         <h4>{user.name}</h4>
                                         <p>{user.email}</p>
+                                        <p>{user.phone ? `📞 ${user.phone}` : "No phone linked"}</p>
                                         <span className="role-tag">{user.role}</span>
                                     </div>
                                 </div>
@@ -1792,18 +1893,6 @@ function App() {
                                     required
                                 />
 
-                                <label>Phone number (for delivery coordination)</label>
-                                <input
-                                    type="tel"
-                                    value={signupPhone}
-                                    onChange={(event) => setSignupPhone(event.target.value)}
-                                    placeholder="e.g. 9876543210 or +91 9876543210"
-                                    required
-                                />
-                                <small className="field-hint">
-                                    Format: 10-digit mobile number (e.g. 9876543210)
-                                </small>
-
                                 <label>Password</label>
                                 <input
                                     type="password"
@@ -1922,6 +2011,19 @@ function App() {
                             </div>
                         </section>
 
+                        {/* PROMPT BANNER FOR INCOMPLETE PHONE / NGO SETUP */}
+                        {!user.phone && (
+                            <div className="setup-alert-banner">
+                                <div>
+                                    <strong>Complete your profile setup</strong>
+                                    <span>Please link and verify your phone number to coordinate pickups smoothly.</span>
+                                </div>
+                                <button className="primary setup-btn" onClick={() => setActiveModal("phone-setup")}>
+                                    Finish Setup
+                                </button>
+                            </div>
+                        )}
+
                         {user.role === "DONOR" && (
                             <>
                                 <section className="form-card">
@@ -1977,7 +2079,7 @@ function App() {
                                                 />
                                                 {listingCoords.lat && (
                                                     <small className="field-hint gps-active">
-                                                        ✓ Exact coordinates captured ({listingCoords.lat.toFixed(4)}, {listingCoords.lng.toFixed(4)})
+                                                        ✓ Exact coordinates captured ({listingCoords.lat.toFixed(5)}, {listingCoords.lng.toFixed(5)})
                                                     </small>
                                                 )}
                                             </div>
@@ -2051,7 +2153,6 @@ function App() {
                                                             <div>Listing #{task.listingId}</div>
                                                         </div>
 
-                                                        {/* SWIGGY/ZOMATO VOLUNTEER CONTACT ON DONOR CARD */}
                                                         {task.volunteerName && (
                                                             <div className="delivery-contact-banner">
                                                                 <div>
@@ -2179,7 +2280,6 @@ function App() {
                                                                 <div>Task #{task.id}</div>
                                                             </div>
 
-                                                            {/* DRIVING LOCATION TELEMETRY */}
                                                             {task.volunteerLatitude && task.volunteerLongitude && (
                                                                 <div className="driver-loc-card">
                                                                     <span>📍 Volunteer Live Driving GPS:</span>
@@ -2254,7 +2354,6 @@ function App() {
                                                     <div>Delivered at: <b>{formatISTTime(task.deliveredAt)}</b></div>
                                                 </div>
 
-                                                {/* SWIGGY/ZOMATO CONTACT & NAVIGATION COMPONENT */}
                                                 <div className="delivery-ops-panel">
                                                     {task.donorPhone && (
                                                         <div className="contact-row">
@@ -2273,7 +2372,6 @@ function App() {
                                                         </div>
                                                     )}
 
-                                                    {/* TURN-BY-TURN DRIVING LINK */}
                                                     {task.pickupLatitude && task.pickupLongitude ? (
                                                         <a
                                                             href={`https://www.google.com/maps/dir/?api=1&destination=${task.pickupLatitude},${task.pickupLongitude}`}
@@ -2444,7 +2542,6 @@ function App() {
                                                 </div>
                                             </div>
 
-                                            {/* DONOR PICKUP CODE BADGE */}
                                             {isOwnDonorListing && listing.pickupCode && (
                                                 <div className="donor-code-pill">
                                                     <span>Donor Pickup Code:</span>
