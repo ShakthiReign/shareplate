@@ -1,0 +1,8 @@
+{
+  rewrites [
+    {
+      source apipath,
+      destination httpsshareplate-swa2.onrender.comapipath
+    }
+  ]
+}
