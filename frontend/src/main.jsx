@@ -416,7 +416,7 @@ function App() {
     const handleSendPhoneOtp = async (e) => {
         e.preventDefault();
         if (!user || !user.id) {
-            setPhoneVerifyMsg("Please sign out and sign in again to verify your session.");
+            setPhoneVerifyMsg("Please sign out and sign in again to refresh your session.");
             return;
         }
 
@@ -1044,6 +1044,7 @@ function App() {
         return "";
     };
 
+    // FIXED POST FOOD LISTING (PRESERVES LOCAL WALL-CLOCK IST FORMAT)
     const postFood = async (event) => {
         event.preventDefault();
 
@@ -1058,14 +1059,18 @@ function App() {
             return;
         }
 
+        const deadlineError = validatePickupDeadline(pickupDeadline);
+        if (deadlineError) {
+            setMsg(deadlineError);
+            return;
+        }
+
         setPosting(true);
         setMsg("");
 
         try {
-            if (!pickupDeadline) throw new Error("Please select a pickup deadline.");
-
-            const deadlineDate = new Date(pickupDeadline);
-            const isoDeadline = deadlineDate.toISOString();
+            // Formats datetime-local input directly into standard LocalDateTime (YYYY-MM-DDTHH:mm:ss)
+            const formattedDeadline = pickupDeadline.length === 16 ? `${pickupDeadline}:00` : pickupDeadline;
 
             const payload = {
                 foodName: foodName.trim(),
@@ -1074,7 +1079,7 @@ function App() {
                 location: location.trim(),
                 latitude: listingCoords.lat,
                 longitude: listingCoords.lng,
-                pickupDeadline: isoDeadline,
+                pickupDeadline: formattedDeadline,
                 safetyDetails: safetyDetails.trim(),
                 donorId: user.id,
                 donorPhone: user.phone
