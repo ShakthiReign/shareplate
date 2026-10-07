@@ -82,8 +82,10 @@ function App() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [activeModal, setActiveModal] = useState(null);
 
-    // PHONE VERIFICATION (ALL 3 ROLES)
+    // PHONE SMS OTP VERIFICATION
+    const [phoneStep, setPhoneStep] = useState("ENTER_PHONE"); // "ENTER_PHONE" or "ENTER_OTP"
     const [setupPhone, setSetupPhone] = useState("");
+    const [phoneOtp, setPhoneOtp] = useState(["", "", "", "", "", ""]);
     const [phoneVerifyLoading, setPhoneVerifyLoading] = useState(false);
     const [phoneVerifyMsg, setPhoneVerifyMsg] = useState("");
 
@@ -114,7 +116,7 @@ function App() {
         return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     });
 
-    // SIGNUP (Phone removed from initial creation)
+    // SIGNUP
     const [showSignup, setShowSignup] = useState(false);
     const [signupName, setSignupName] = useState("");
     const [signupEmail, setSignupEmail] = useState("");
@@ -210,6 +212,9 @@ function App() {
                     if (data && typeof data.online === "boolean") {
                         setIsOnline(data.online);
                     }
+                    if (data && data.phone && !user.phone) {
+                        setUser(prev => ({ ...prev, phone: data.phone }));
+                    }
                 })
                 .catch(() => {});
         }
@@ -237,7 +242,6 @@ function App() {
         return () => navigator.geolocation.clearWatch(watchId);
     }, [user, tasks]);
 
-    // PRECISE GPS AUTO-DETECT WITH HARDWARE ACCURACY & FALLBACK
     const handleGetDonorLocation = () => {
         if (!navigator.geolocation) {
             setMsg("Geolocation is not supported by your browser.");
@@ -269,7 +273,7 @@ function App() {
             },
             (err) => {
                 setLocatingDonor(false);
-                setMsg("Could not retrieve precise GPS: " + err.message + ". Enter address manually if on desktop Wi-Fi.");
+                setMsg("Could not retrieve GPS: " + err.message);
             },
             { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
         );
@@ -397,37 +401,66 @@ function App() {
         setConfirmNewPasswordVal("");
     };
 
-    // PHONE VERIFICATION SUBMIT FOR ANY ROLE
-    const submitPhoneSetup = async (e) => {
+    // 2-STEP SMS OTP VERIFICATION WORKFLOW
+    const handleSendPhoneOtp = async (e) => {
         e.preventDefault();
         setPhoneVerifyLoading(true);
         setPhoneVerifyMsg("");
 
         try {
-            const cleanPhone = setupPhone.replace(/\D/g, "");
-            if (cleanPhone.length !== 10) {
-                throw new Error("Please enter a valid 10-digit mobile number.");
-            }
+            const clean = setupPhone.replace(/\D/g, "");
+            if (clean.length !== 10) throw new Error("Enter a valid 10-digit mobile number.");
 
-            const res = await authFetch(`${API}/users/${user.id}/phone`, {
-                method: "PUT",
+            const res = await authFetch(`${API}/users/${user.id}/send-phone-otp`, {
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: cleanPhone }),
+                body: JSON.stringify({ phone: clean }),
             });
 
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || "Could not save phone number.");
-            }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || data.message || "Failed to send SMS OTP.");
 
-            setUser(prev => ({ ...prev, phone: cleanPhone }));
-            setPhoneVerifyMsg("Phone number registered successfully! ✓");
+            setPhoneStep("ENTER_OTP");
+            setPhoneVerifyMsg(`Verification OTP sent to +91 ${clean}`);
+        } catch (err) {
+            setPhoneVerifyMsg(err.message || "Could not send SMS code.");
+        } finally {
+            setPhoneVerifyLoading(false);
+        }
+    };
+
+    const handleVerifyPhoneOtp = async (e) => {
+        e.preventDefault();
+        const code = phoneOtp.join("");
+        if (code.length !== 6) {
+            setPhoneVerifyMsg("Please enter all 6 digits of the OTP.");
+            return;
+        }
+
+        setPhoneVerifyLoading(true);
+        setPhoneVerifyMsg("");
+
+        try {
+            const clean = setupPhone.replace(/\D/g, "");
+            const res = await authFetch(`${API}/users/${user.id}/verify-phone-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: clean, code }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || data.message || "Invalid OTP code.");
+
+            setUser(prev => ({ ...prev, phone: clean }));
+            setPhoneVerifyMsg("Phone verified and saved to account successfully! ✓");
             setTimeout(() => {
                 setActiveModal(null);
+                setPhoneStep("ENTER_PHONE");
+                setPhoneOtp(["", "", "", "", "", ""]);
                 setPhoneVerifyMsg("");
             }, 1200);
         } catch (err) {
-            setPhoneVerifyMsg(err.message || "Failed to update phone number.");
+            setPhoneVerifyMsg(err.message || "Verification failed.");
         } finally {
             setPhoneVerifyLoading(false);
         }
@@ -775,7 +808,6 @@ function App() {
         }
     };
 
-    // REGISTER WITHOUT REQUIRING PHONE UPFRONT
     const register = async (event) => {
         event.preventDefault();
         setSignupMessage("");
@@ -982,18 +1014,22 @@ function App() {
         return "";
     };
 
-    // FIXED POST FOOD LISTING (ISO TIMESTAMP + DETAILED SERVER ERROR HANDLING)
     const postFood = async (event) => {
         event.preventDefault();
+
+        // Enforce phone verification before allowing post
+        if (!user.phone) {
+            setActiveModal("phone-setup");
+            setMsg("Please verify your mobile number first so volunteers can contact you for collection.");
+            return;
+        }
+
         setPosting(true);
         setMsg("");
 
         try {
-            if (!pickupDeadline) {
-                throw new Error("Please select a pickup deadline.");
-            }
+            if (!pickupDeadline) throw new Error("Please select a pickup deadline.");
 
-            // Normalizes local datetime-local format into standard ISO-8601 string for Spring Boot
             const deadlineDate = new Date(pickupDeadline);
             const isoDeadline = deadlineDate.toISOString();
 
@@ -1007,6 +1043,7 @@ function App() {
                 pickupDeadline: isoDeadline,
                 safetyDetails: safetyDetails.trim(),
                 donorId: user.id,
+                donorPhone: user.phone
             };
 
             const response = await authFetch(`${API}/listings`, {
@@ -1357,7 +1394,6 @@ function App() {
                 </div>
 
                 <div className="header-actions">
-                    {/* SWIGGY/ZOMATO VOLUNTEER ONLINE/OFFLINE TOGGLE */}
                     {user?.role === "VOLUNTEER" && (
                         <button
                             type="button"
@@ -1424,7 +1460,7 @@ function App() {
                                 <span>📋</span> Active Dashboard
                             </div>
 
-                            {/* "FINISH SET UP YOUR ACCOUNT" PROMPT IN MENU */}
+                            {/* "FINISH SETTING UP PHONE" PROMPT */}
                             {!user.phone && (
                                 <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("phone-setup"); }}>
                                     <span>📱</span> Finish Setting Up Phone
@@ -1469,7 +1505,7 @@ function App() {
                     <div className="modal-card" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3>
-                                {activeModal === "phone-setup" && "Finish Setup: Mobile Verification"}
+                                {activeModal === "phone-setup" && "SMS Phone Verification"}
                                 {activeModal === "ngo-verify" && "NGO Legal Verification"}
                                 {activeModal === "profile" && "Profile & Avatar Customization"}
                                 {activeModal === "history" && `${user.role} Rescue Activity History`}
@@ -1478,32 +1514,78 @@ function App() {
                             <button className="close-drawer" onClick={() => setActiveModal(null)}>✕</button>
                         </div>
 
-                        {/* PHONE SETUP MODAL FOR ALL 3 ROLES */}
+                        {/* 2-STEP SMS OTP VERIFICATION MODAL */}
                         {activeModal === "phone-setup" && (
                             <div className="modal-body">
                                 <p className="history-intro">
-                                    Add your active mobile number to enable direct call coordination between donors, NGOs, and delivery volunteers during rescues.
+                                    Verify your mobile number via SMS OTP to enable direct call coordination during pickups. Each mobile number is unique and linked to one account only.
                                 </p>
 
-                                <form onSubmit={submitPhoneSetup} className="security-form">
-                                    <label>10-Digit Mobile Number</label>
-                                    <input
-                                        type="tel"
-                                        pattern="[0-9]{10}"
-                                        maxLength="10"
-                                        placeholder="e.g. 9876543210"
-                                        value={setupPhone}
-                                        onChange={(e) => setSetupPhone(e.target.value.replace(/\D/g, ""))}
-                                        required
-                                    />
-                                    <small className="field-hint">
-                                        Format: 10-digit phone number (used strictly for food rescue handovers).
-                                    </small>
+                                {phoneStep === "ENTER_PHONE" ? (
+                                    <form onSubmit={handleSendPhoneOtp} className="security-form">
+                                        <label>10-Digit Mobile Number</label>
+                                        <input
+                                            type="tel"
+                                            pattern="[0-9]{10}"
+                                            maxLength="10"
+                                            placeholder="e.g. 9994199885"
+                                            value={setupPhone}
+                                            onChange={(e) => setSetupPhone(e.target.value.replace(/\D/g, ""))}
+                                            required
+                                        />
+                                        <small className="field-hint">
+                                            Format: 10-digit phone number (receives 6-digit SMS OTP).
+                                        </small>
 
-                                    <button className="primary submit-large" type="submit" disabled={phoneVerifyLoading}>
-                                        {phoneVerifyLoading ? "Saving Number..." : "Save & Complete Verification"}
-                                    </button>
-                                </form>
+                                        <button className="primary submit-large" type="submit" disabled={phoneVerifyLoading}>
+                                            {phoneVerifyLoading ? "Sending SMS OTP..." : "Send Verification Code"}
+                                        </button>
+                                    </form>
+                                ) : (
+                                    <form onSubmit={handleVerifyPhoneOtp} className="security-form">
+                                        <label>Enter 6-Digit SMS Code sent to +91 {setupPhone}</label>
+                                        <div className="otp-grid">
+                                            {phoneOtp.map((digit, idx) => (
+                                                <input
+                                                    key={idx}
+                                                    id={`phone-otp-${idx}`}
+                                                    className="otp-input"
+                                                    type="text"
+                                                    maxLength="1"
+                                                    inputMode="numeric"
+                                                    value={digit}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/\D/g, "");
+                                                        const next = [...phoneOtp];
+                                                        next[idx] = val;
+                                                        setPhoneOtp(next);
+                                                        if (val && idx < 5) document.getElementById(`phone-otp-${idx + 1}`)?.focus();
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Backspace" && !phoneOtp[idx] && idx > 0) {
+                                                            document.getElementById(`phone-otp-${idx - 1}`)?.focus();
+                                                        }
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        <button className="primary submit-large" type="submit" disabled={phoneVerifyLoading}>
+                                            {phoneVerifyLoading ? "Verifying..." : "Verify & Save Phone Number"}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            className="text-button"
+                                            onClick={() => {
+                                                setPhoneStep("ENTER_PHONE");
+                                                setPhoneVerifyMsg("");
+                                            }}
+                                        >
+                                            ← Change Phone Number
+                                        </button>
+                                    </form>
+                                )}
 
                                 {phoneVerifyMsg && (
                                     <div className="msg" role="status">
@@ -1565,7 +1647,7 @@ function App() {
                                     <div>
                                         <h4>{user.name}</h4>
                                         <p>{user.email}</p>
-                                        <p>{user.phone ? `📞 ${user.phone}` : "No phone linked"}</p>
+                                        <p>{user.phone ? `📞 +91 ${user.phone}` : "No verified phone linked"}</p>
                                         <span className="role-tag">{user.role}</span>
                                     </div>
                                 </div>
@@ -2011,12 +2093,12 @@ function App() {
                             </div>
                         </section>
 
-                        {/* PROMPT BANNER FOR INCOMPLETE PHONE / NGO SETUP */}
+                        {/* PROMPT BANNER FOR INCOMPLETE PHONE SETUP */}
                         {!user.phone && (
                             <div className="setup-alert-banner">
                                 <div>
                                     <strong>Complete your profile setup</strong>
-                                    <span>Please link and verify your phone number to coordinate pickups smoothly.</span>
+                                    <span>Please verify your unique mobile number to coordinate pickups smoothly.</span>
                                 </div>
                                 <button className="primary setup-btn" onClick={() => setActiveModal("phone-setup")}>
                                     Finish Setup
@@ -2540,6 +2622,11 @@ function App() {
                                                 <div>
                                                     <span>⏰</span> Deadline: {formatISTTime(listing.pickupDeadline)}
                                                 </div>
+                                                {listing.donorPhone && (
+                                                    <div>
+                                                        <span>📞</span> Donor Contact: <a href={`tel:${listing.donorPhone}`} className="phone-link">{listing.donorPhone}</a>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {isOwnDonorListing && listing.pickupCode && (

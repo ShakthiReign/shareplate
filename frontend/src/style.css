@@ -172,6 +172,7 @@ body {
     font-size: 13px;
     font-weight: 750;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    cursor: pointer;
 }
 
 .hamburger-btn {
@@ -186,6 +187,7 @@ body {
     align-items: center;
     gap: 4px;
     padding: 0;
+    cursor: pointer;
 }
 
 .hamburger-line {
@@ -337,6 +339,11 @@ body {
     border-color: #d97706;
 }
 
+.drawer-footer {
+    margin-top: auto;
+    padding-top: 14px;
+}
+
 .drawer-logout-btn {
     width: 100%;
     padding: 12px;
@@ -354,7 +361,9 @@ body {
     color: #e57373;
 }
 
-/* SETUP INCOMPLETE ALERT BANNER */
+/* =========================================================
+   SETUP ALERT BANNER
+   ========================================================= */
 .setup-alert-banner {
     display: flex;
     align-items: center;
@@ -645,6 +654,7 @@ body {
     font-weight: 650;
     padding: 8px 0;
     cursor: pointer;
+    display: inline-block;
 }
 
 .text-button:hover {
@@ -652,7 +662,7 @@ body {
 }
 
 /* =========================================================
-   EMAIL & OTP VERIFICATION GRID
+   EMAIL & PHONE OTP INPUT GRID
    ========================================================= */
 .verification-card {
     text-align: center;
@@ -678,10 +688,10 @@ body {
     word-break: break-all;
 }
 
-.verification-form {
+.verification-form, .security-form {
     display: grid;
-    gap: 16px;
-    margin: 20px 0 10px;
+    gap: 14px;
+    margin: 16px 0 10px;
 }
 
 .otp-grid {
@@ -962,6 +972,8 @@ textarea {
     background: transparent;
     padding: 4px 8px;
     color: var(--sp-text-muted);
+    border: none;
+    cursor: pointer;
 }
 
 .filter-tabs {
@@ -1119,7 +1131,7 @@ article.modern-card, article.code-card, article.task-card, article.volunteer-car
 }
 
 /* =========================================================
-   SWIGGY / ZOMATO DISPATCH & NAVIGATION STYLES
+   DISPATCH & GPS NAVIGATION STYLES
    ========================================================= */
 .delivery-contact-banner {
     margin: 12px 0;
@@ -1498,7 +1510,7 @@ article.modern-card, article.code-card, article.task-card, article.volunteer-car
 }
 
 /* =========================================================
-   RESPONSIVENESS (MOBILE FRIENDLY)
+   RESPONSIVENESS (MOBILE-FIRST TUNING)
    ========================================================= */
 @media (max-width: 768px) {
     .app-container {
