@@ -36,6 +36,13 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/x
 <artifactId>spring-boot-starter-data-jpa</artifactId>
 </dependency>
 
+<!--SmS Service-->
+<dependency>
+    <groupId>com.twilio.sdk</groupId>
+    <artifactId>twilio</artifactId>
+    <version>9.14.0</version>
+</dependency>
+
 <!-- PostgreSQL -->
 <dependency>
 <groupId>org.postgresql</groupId>

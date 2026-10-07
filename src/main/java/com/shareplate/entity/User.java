@@ -14,7 +14,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 @Entity
-@Table(name = "users", uniqueConstraints = { @UniqueConstraint(name = "uk_users_email", columnNames = "email") })
+@Table(name = "users", uniqueConstraints = { 
+	@UniqueConstraint(name = "uk_users_email", columnNames = "email"),
+	@UniqueConstraint(name = "uk_users_phone", columnNames = "phone")
+})
 public class User {
 
 	@Id
@@ -46,11 +49,19 @@ public class User {
 	@Column(name = "darpan_id", length = 64)
 	private String darpanId;
 
-	@Column(name = "phone", length = 20)
+	@Column(name = "phone", length = 20, unique = true)
 	private String phone;
 
 	@Column(name = "ngo_verified", nullable = false)
 	private boolean ngoVerified = false;
+
+	// Volunteer Duty & Live Telemetry
+	@Column(name = "online", nullable = false)
+	private boolean online = false;
+
+	private Double latitude;
+
+	private Double longitude;
 
 	public User() {
 	}
@@ -121,5 +132,29 @@ public class User {
 
 	public void setNgoVerified(boolean ngoVerified) {
 		this.ngoVerified = ngoVerified;
+	}
+
+	public boolean isOnline() {
+		return online;
+	}
+
+	public void setOnline(boolean online) {
+		this.online = online;
+	}
+
+	public Double getLatitude() {
+		return latitude;
+	}
+
+	public void setLatitude(Double latitude) {
+		this.latitude = latitude;
+	}
+
+	public Double getLongitude() {
+		return longitude;
+	}
+
+	public void setLongitude(Double longitude) {
+		this.longitude = longitude;
 	}
 }

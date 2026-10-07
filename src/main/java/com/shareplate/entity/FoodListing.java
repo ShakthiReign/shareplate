@@ -31,6 +31,12 @@ public class FoodListing {
 	private String safetyDetails;
 	private Long donorId;
 	private Long claimedByNgoId;
+	
+	// Coordinates & Contact fields
+	private Double latitude;
+	private Double longitude;
+	private String donorPhone;
+
 	@Enumerated(EnumType.STRING)
 	private ListingStatus status = ListingStatus.AVAILABLE;
 
@@ -103,6 +109,30 @@ public class FoodListing {
 
 	public void setClaimedByNgoId(Long v) {
 		claimedByNgoId = v;
+	}
+
+	public Double getLatitude() {
+		return latitude;
+	}
+
+	public void setLatitude(Double latitude) {
+		this.latitude = latitude;
+	}
+
+	public Double getLongitude() {
+		return longitude;
+	}
+
+	public void setLongitude(Double longitude) {
+		this.longitude = longitude;
+	}
+
+	public String getDonorPhone() {
+		return donorPhone;
+	}
+
+	public void setDonorPhone(String donorPhone) {
+		this.donorPhone = donorPhone;
 	}
 
 	public ListingStatus getStatus() {

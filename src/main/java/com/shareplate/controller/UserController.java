@@ -203,4 +203,63 @@ public class UserController {
 		return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole(), user.isVerified(),
 				user.isNgoVerified());
 	}
+	@Autowired
+    private com.shareplate.service.SmsService smsService;
+
+    // 1. Send OTP (Enforcing uniqueness before sending)
+    @PostMapping("/{id}/send-phone-otp")
+    public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String rawPhone = body.get("phone");
+        if (rawPhone == null || rawPhone.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Phone number is required"));
+        }
+
+        String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
+        if (cleanPhone.length() != 10) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
+        }
+
+        // Check if phone number is already registered by another account
+        userRepository.findByPhone(cleanPhone).ifPresent(existingUser -> {
+            if (!existingUser.getId().equals(id)) {
+                throw new IllegalArgumentException("This phone number is already registered to another account.");
+            }
+        });
+
+        String formatted = smsService.generateAndSendOtp(cleanPhone);
+        return ResponseEntity.ok(Map.of("message", "OTP sent successfully to " + formatted));
+    }
+
+    // 2. Verify OTP and commit phone to database
+    @PostMapping("/{id}/verify-phone-otp")
+    public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String rawPhone = body.get("phone");
+        String code = body.get("code");
+
+        if (rawPhone == null || code == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Phone and OTP code are required"));
+        }
+
+        String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
+
+        if (!smsService.verifyOtp(cleanPhone, code)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP code"));
+        }
+
+        // Enforce uniqueness one more time before save
+        if (userRepository.findByPhone(cleanPhone).filter(u -> !u.getId().equals(id)).isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This phone number is already registered to another account."));
+        }
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setPhone(cleanPhone);
+        userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of(
+            "message", "Phone verified successfully!",
+            "phone", cleanPhone
+        ));
+    }
 }

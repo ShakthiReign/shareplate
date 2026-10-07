@@ -22,6 +22,18 @@ public class PickupTask {
 
 	private Long volunteerId;
 
+	// Volunteer Identity & Contact
+	private String volunteerName;
+	private String volunteerPhone;
+
+	// Cross-Role Contact Numbers
+	private String donorPhone;
+	private String ngoPhone;
+
+	// Live Volunteer Telemetry
+	private Double volunteerLatitude;
+	private Double volunteerLongitude;
+
 	/*
 	 * PICKUP CODE
 	 *
@@ -81,6 +93,54 @@ public class PickupTask {
 
 	public void setVolunteerId(Long volunteerId) {
 		this.volunteerId = volunteerId;
+	}
+
+	public String getVolunteerName() {
+		return volunteerName;
+	}
+
+	public void setVolunteerName(String volunteerName) {
+		this.volunteerName = volunteerName;
+	}
+
+	public String getVolunteerPhone() {
+		return volunteerPhone;
+	}
+
+	public void setVolunteerPhone(String volunteerPhone) {
+		this.volunteerPhone = volunteerPhone;
+	}
+
+	public String getDonorPhone() {
+		return donorPhone;
+	}
+
+	public void setDonorPhone(String donorPhone) {
+		this.donorPhone = donorPhone;
+	}
+
+	public String getNgoPhone() {
+		return ngoPhone;
+	}
+
+	public void setNgoPhone(String ngoPhone) {
+		this.ngoPhone = ngoPhone;
+	}
+
+	public Double getVolunteerLatitude() {
+		return volunteerLatitude;
+	}
+
+	public void setVolunteerLatitude(Double volunteerLatitude) {
+		this.volunteerLatitude = volunteerLatitude;
+	}
+
+	public Double getVolunteerLongitude() {
+		return volunteerLongitude;
+	}
+
+	public void setVolunteerLongitude(Double volunteerLongitude) {
+		this.volunteerLongitude = volunteerLongitude;
 	}
 
 	public String getPickupCodeEncrypted() {
