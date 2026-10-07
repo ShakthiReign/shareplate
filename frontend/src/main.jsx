@@ -10,7 +10,7 @@ const authFetch = async (url, options = {}) => {
         ...(options.headers || {}),
     };
 
-    if (token) {
+    if (token && token !== "null" && token !== "undefined") {
         headers.Authorization = `Bearer ${token}`;
     }
 
@@ -76,14 +76,22 @@ function PasswordRequirements({ password }) {
 }
 
 function App() {
-    const [user, setUser] = useState(null);
+    // PERSISTENT USER SESSION STATE
+    const [user, setUser] = useState(() => {
+        try {
+            const saved = localStorage.getItem("shareplate_user");
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
 
     // HAMBURGER / MODAL STATES
     const [menuOpen, setMenuOpen] = useState(false);
     const [activeModal, setActiveModal] = useState(null);
 
     // PHONE SMS OTP VERIFICATION
-    const [phoneStep, setPhoneStep] = useState("ENTER_PHONE"); // "ENTER_PHONE" or "ENTER_OTP"
+    const [phoneStep, setPhoneStep] = useState("ENTER_PHONE");
     const [setupPhone, setSetupPhone] = useState("");
     const [phoneOtp, setPhoneOtp] = useState(["", "", "", "", "", ""]);
     const [phoneVerifyLoading, setPhoneVerifyLoading] = useState(false);
@@ -204,7 +212,7 @@ function App() {
     }, [resendCooldown]);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user || !user.id) return;
         if (user.role === "VOLUNTEER") {
             authFetch(`${API}/users/${user.id}`)
                 .then(res => res.json())
@@ -212,13 +220,15 @@ function App() {
                     if (data && typeof data.online === "boolean") {
                         setIsOnline(data.online);
                     }
-                    if (data && data.phone && !user.phone) {
-                        setUser(prev => ({ ...prev, phone: data.phone }));
+                    if (data && data.phone && data.phone !== user.phone) {
+                        const updated = { ...user, phone: data.phone };
+                        setUser(updated);
+                        localStorage.setItem("shareplate_user", JSON.stringify(updated));
                     }
                 })
                 .catch(() => {});
         }
-    }, [user]);
+    }, [user?.id]);
 
     useEffect(() => {
         if (!user || user.role !== "VOLUNTEER" || !tasks.length) return;
@@ -280,6 +290,7 @@ function App() {
     };
 
     const toggleOnlineStatus = async () => {
+        if (!user || !user.id) return;
         setTogglingOnline(true);
         const nextStatus = !isOnline;
 
@@ -404,6 +415,11 @@ function App() {
     // 2-STEP SMS OTP VERIFICATION WORKFLOW
     const handleSendPhoneOtp = async (e) => {
         e.preventDefault();
+        if (!user || !user.id) {
+            setPhoneVerifyMsg("Please sign out and sign in again to verify your session.");
+            return;
+        }
+
         setPhoneVerifyLoading(true);
         setPhoneVerifyMsg("");
 
@@ -431,6 +447,11 @@ function App() {
 
     const handleVerifyPhoneOtp = async (e) => {
         e.preventDefault();
+        if (!user || !user.id) {
+            setPhoneVerifyMsg("Session expired. Please sign in again.");
+            return;
+        }
+
         const code = phoneOtp.join("");
         if (code.length !== 6) {
             setPhoneVerifyMsg("Please enter all 6 digits of the OTP.");
@@ -451,7 +472,10 @@ function App() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || data.message || "Invalid OTP code.");
 
-            setUser(prev => ({ ...prev, phone: clean }));
+            const updatedUser = { ...user, phone: clean };
+            setUser(updatedUser);
+            localStorage.setItem("shareplate_user", JSON.stringify(updatedUser));
+
             setPhoneVerifyMsg("Phone verified and saved to account successfully! ✓");
             setTimeout(() => {
                 setActiveModal(null);
@@ -468,6 +492,7 @@ function App() {
 
     const submitNgoVerification = async (e) => {
         e.preventDefault();
+        if (!user || !user.id) return;
         setNgoVerifyLoading(true);
         setNgoVerifyMsg("");
 
@@ -487,7 +512,10 @@ function App() {
                 throw new Error(err);
             }
 
-            setUser((prev) => ({ ...prev, ngoVerified: true, phone: ngoPhone }));
+            const updatedUser = { ...user, ngoVerified: true, phone: ngoPhone };
+            setUser(updatedUser);
+            localStorage.setItem("shareplate_user", JSON.stringify(updatedUser));
+
             setActiveModal(null);
             setNgoVerifyMsg("");
 
@@ -660,10 +688,10 @@ function App() {
 
     useEffect(() => {
         if (user) loadListings();
-    }, [user]);
+    }, [user?.id]);
 
     useEffect(() => {
-        if (!user) {
+        if (!user || !user.id) {
             setTasks([]);
             setDonorTasks([]);
             setVolunteers([]);
@@ -677,7 +705,7 @@ function App() {
             loadVolunteers();
             loadNgoTasks();
         }
-    }, [user]);
+    }, [user?.id, user?.role]);
 
     useEffect(() => {
         if (user?.role !== "DONOR") {
@@ -724,7 +752,7 @@ function App() {
         };
 
         if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, donorTasks]);
+    }, [user?.id, user?.role, listings, donorTasks]);
 
     useEffect(() => {
         if (user?.role !== "NGO") {
@@ -766,7 +794,7 @@ function App() {
         };
 
         if (relevantTasks.length > 0) fetchCodes();
-    }, [user, listings, ngoTasks]);
+    }, [user?.id, user?.role, listings, ngoTasks]);
 
     const login = async (event) => {
         event.preventDefault();
@@ -791,6 +819,7 @@ function App() {
 
             const authResponse = await response.json();
             localStorage.setItem("shareplate_token", authResponse.token);
+            localStorage.setItem("shareplate_user", JSON.stringify(authResponse.user));
             setUser(authResponse.user);
             setPassword("");
         } catch (error) {
@@ -969,6 +998,7 @@ function App() {
 
     const logout = () => {
         localStorage.removeItem("shareplate_token");
+        localStorage.removeItem("shareplate_user");
         setUser(null);
         setMenuOpen(false);
         setActiveModal(null);
@@ -1017,7 +1047,11 @@ function App() {
     const postFood = async (event) => {
         event.preventDefault();
 
-        // Enforce phone verification before allowing post
+        if (!user || !user.id) {
+            setMsg("Session expired. Please sign out and sign back in to post food.");
+            return;
+        }
+
         if (!user.phone) {
             setActiveModal("phone-setup");
             setMsg("Please verify your mobile number first so volunteers can contact you for collection.");
@@ -1460,7 +1494,6 @@ function App() {
                                 <span>📋</span> Active Dashboard
                             </div>
 
-                            {/* "FINISH SETTING UP PHONE" PROMPT */}
                             {!user.phone && (
                                 <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("phone-setup"); }}>
                                     <span>📱</span> Finish Setting Up Phone
