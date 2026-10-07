@@ -275,8 +275,7 @@ public class UserController {
 				user.getEmail(), 
 				user.getRole(), 
 				user.isVerified(),
-				user.isNgoVerified(),
-				user.getPhone()
+				user.isNgoVerified()
 		);
 	}
 }
