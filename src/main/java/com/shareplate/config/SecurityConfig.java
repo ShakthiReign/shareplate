@@ -7,7 +7,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -19,13 +18,12 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // 1. Provides the missing PasswordEncoder bean required by UserService
+    // Return the concrete class BCryptPasswordEncoder so EmailVerificationService and UserService can both autowire it
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // 2. Configure endpoint permissions, CORS, and CSRF
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -34,22 +32,13 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers(
-                    "/api/users/register",
-                    "/api/users/login",
-                    "/api/users/verify-email",
-                    "/api/users/resend-verification",
-                    "/api/users/forgot-password",
-                    "/api/users/reset-password",
-                    "/api/users/validate-reset-token"
-                ).permitAll()
+                .requestMatchers("/api/**").permitAll()
                 .anyRequest().permitAll()
             );
 
         return http.build();
     }
 
-    // 3. Permissive CORS configuration for Vercel preview/production domains
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
