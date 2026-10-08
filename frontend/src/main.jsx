@@ -289,26 +289,39 @@ function App() {
         );
     };
 
+    // FIXED TOGGLE ONLINE STATUS WITH USER ID
     const toggleOnlineStatus = async () => {
         if (!user || !user.id) return;
         setTogglingOnline(true);
+        setTaskMessage("");
         const nextStatus = !isOnline;
 
         const updateStatusOnServer = async (lat = null, lng = null) => {
             try {
-                const res = await authFetch(`${API}/users/online-status`, {
+                const res = await authFetch(`${API}/users/${user.id}/online-status`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ online: nextStatus, latitude: lat, longitude: lng }),
+                    body: JSON.stringify({
+                        userId: user.id,
+                        online: nextStatus,
+                        latitude: lat,
+                        longitude: lng,
+                    }),
                 });
+
                 if (res.ok) {
                     setIsOnline(nextStatus);
                     setTaskMessage(nextStatus ? "You are now ONLINE and ready for pickups!" : "You are OFFLINE.");
                 } else {
-                    setTaskMessage("Could not update status.");
+                    let errMsg = "Could not update status.";
+                    try {
+                        const data = await res.json();
+                        errMsg = data.message || data.error || errMsg;
+                    } catch {}
+                    setTaskMessage(errMsg);
                 }
             } catch {
-                setTaskMessage("Failed to update status on server.");
+                setTaskMessage("Failed to connect to server.");
             } finally {
                 setTogglingOnline(false);
             }
@@ -318,7 +331,7 @@ function App() {
             navigator.geolocation.getCurrentPosition(
                 (pos) => updateStatusOnServer(pos.coords.latitude, pos.coords.longitude),
                 () => updateStatusOnServer(null, null),
-                { enableHighAccuracy: true, maximumAge: 0 }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
             );
         } else {
             await updateStatusOnServer(null, null);
@@ -490,29 +503,34 @@ function App() {
         }
     };
 
+    // FIXED SUBMIT NGO VERIFICATION (RESOLVES "Authentication is required")
     const submitNgoVerification = async (e) => {
         e.preventDefault();
-        if (!user || !user.id) return;
+        if (!user || !user.id) {
+            setNgoVerifyMsg("Session not found. Please log in again.");
+            return;
+        }
+
         setNgoVerifyLoading(true);
         setNgoVerifyMsg("");
 
         try {
+            const cleanNgoPhone = ngoPhone.replace(/\D/g, "");
+            if (cleanNgoPhone.length !== 10) throw new Error("Enter a valid 10-digit mobile number.");
+
             const response = await authFetch(`${API}/users/${user.id}/verify-ngo`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ darpanId, phone: ngoPhone }),
+                body: JSON.stringify({ darpanId: darpanId.trim(), phone: cleanNgoPhone }),
             });
 
+            const data = await response.json().catch(() => null);
+
             if (!response.ok) {
-                let err = "Verification failed. Check your Darpan ID & Phone.";
-                try {
-                    const data = await response.json();
-                    err = data.message || data.error || err;
-                } catch {}
-                throw new Error(err);
+                throw new Error(data?.message || data?.error || "Could not complete verification.");
             }
 
-            const updatedUser = { ...user, ngoVerified: true, phone: ngoPhone };
+            const updatedUser = { ...user, ngoVerified: true, phone: cleanNgoPhone };
             setUser(updatedUser);
             localStorage.setItem("shareplate_user", JSON.stringify(updatedUser));
 
