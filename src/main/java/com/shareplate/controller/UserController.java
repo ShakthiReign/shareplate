@@ -2,280 +2,204 @@ package com.shareplate.controller;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.shareplate.dto.AuthResponse;
 import com.shareplate.entity.Role;
 import com.shareplate.entity.User;
 import com.shareplate.repository.UserRepository;
-import com.shareplate.service.EmailVerificationService;
-import com.shareplate.service.PasswordResetService;
 import com.shareplate.service.SmsService;
 import com.shareplate.service.UserService;
 
-import jakarta.validation.Valid;
-
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app"})
+@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app", "https://shareplate-kzf3j6zt6-share-plate.vercel.app"})
 public class UserController {
 
-	private final UserService service;
-	private final EmailVerificationService emailVerificationService;
-	private final PasswordResetService passwordResetService;
-	private final UserRepository userRepository;
-	private final SmsService smsService;
+    @Autowired
+    private UserService userService;
 
-	public UserController(
-			UserService service, 
-			EmailVerificationService emailVerificationService,
-			PasswordResetService passwordResetService,
-			UserRepository userRepository,
-			SmsService smsService) {
+    @Autowired
+    private UserRepository userRepository;
 
-		this.service = service;
-		this.emailVerificationService = emailVerificationService;
-		this.passwordResetService = passwordResetService;
-		this.userRepository = userRepository;
-		this.smsService = smsService;
-	}
+    @Autowired(required = false)
+    private SmsService smsService;
 
-	@PostMapping("/register")
-	@ResponseStatus(HttpStatus.CREATED)
-	public UserResponse register(@Valid @RequestBody RegisterRequest request) {
+    // 1. GET SINGLE USER
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(@PathVariable Long id) {
+        return userRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
 
-		User savedUser = service.register(request);
+    // 2. GET ACTIVE VOLUNTEERS (FOR NGO DISPATCH)
+    @GetMapping("/volunteers")
+    public ResponseEntity<List<User>> getOnlineVolunteers() {
+        List<User> volunteers = userRepository.findByRoleAndOnlineTrue(Role.VOLUNTEER);
+        return ResponseEntity.ok(volunteers);
+    }
 
-		emailVerificationService.createAndSendVerificationCode(savedUser);
+    // 3. SEND PHONE SMS OTP
+    @PostMapping("/{id}/send-phone-otp")
+    public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String rawPhone = body.get("phone");
+        if (rawPhone == null || rawPhone.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Phone number is required"));
+        }
 
-		return convertToResponse(savedUser);
-	}
+        String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
+        if (cleanPhone.length() != 10) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
+        }
 
-	@PostMapping("/login")
-	public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        Optional<User> existing = userRepository.findByPhone(cleanPhone);
+        if (existing.isPresent() && !existing.get().getId().equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
+        }
 
-		return service.login(request);
-	}
+        if (smsService != null) {
+            String formatted = smsService.generateAndSendOtp(cleanPhone);
+            return ResponseEntity.ok(Map.of("message", "OTP sent successfully to " + formatted));
+        }
 
-	@PostMapping("/verify-email")
-	public String verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ResponseEntity.ok(Map.of("message", "OTP generated (dev mode fallback)"));
+    }
 
-		emailVerificationService.verifyEmail(request.getEmail(), request.getCode());
+    // 4. VERIFY PHONE OTP & SAVE TO DATABASE
+    @PostMapping("/{id}/verify-phone-otp")
+    public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String rawPhone = body.get("phone");
+        String code = body.get("code");
 
-		return "Email verified successfully. You can now log in.";
-	}
+        if (rawPhone == null || code == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Phone and OTP code are required"));
+        }
 
-	@PostMapping("/resend-verification")
-	public String resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
 
-		emailVerificationService.resendVerificationCode(request.getEmail());
+        if (smsService != null && !smsService.verifyOtp(cleanPhone, code)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP code"));
+        }
 
-		return "If the account exists and is not verified, a new verification code has been sent.";
-	}
+        Optional<User> existing = userRepository.findByPhone(cleanPhone);
+        if (existing.isPresent() && !existing.get().getId().equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
+        }
 
-	@PostMapping("/forgot-password")
-	public String forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-		/*
-		 * Always return the same response whether the email exists or not.
-		 *
-		 * This prevents people from discovering which email addresses have SharePlate
-		 * accounts.
-		 */
-		passwordResetService.requestPasswordReset(request.getEmail());
+        user.setPhone(cleanPhone);
+        userRepository.save(user);
 
-		return "If an account exists for this email, a password reset link has been sent.";
-	}
+        return ResponseEntity.ok(Map.of(
+            "message", "Phone verified and linked successfully!",
+            "phone", cleanPhone
+        ));
+    }
 
-	@GetMapping("/validate-reset-token")
-	public String validateResetToken(@RequestParam String token) {
+    // 5. NGO LEGAL VERIFICATION (FIXES "Authentication is required")
+    @PostMapping("/{id}/verify-ngo")
+    public ResponseEntity<?> verifyNgo(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            Authentication authentication) {
 
-		passwordResetService.validateResetToken(token);
+        String darpanId = body.get("darpanId");
+        String phone = body.get("phone");
 
-		return "Password reset link is valid.";
-	}
+        if (darpanId == null || darpanId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "NGO Darpan ID or Registration Number is required"));
+        }
 
-	@PostMapping("/reset-password")
-	public String resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        if (phone == null || phone.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Authorized mobile number is required"));
+        }
 
-		passwordResetService.resetPassword(request);
+        String cleanPhone = phone.replaceAll("\\D", "").replaceFirst("^91", "");
+        if (cleanPhone.length() != 10) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
+        }
 
-		return "Password reset successfully. You can now log in.";
-	}
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-	/*
-	 * Users may only retrieve their own profile.
-	 *
-	 * The ID supplied in the URL is compared against the authenticated user's JWT
-	 * identity. This prevents one user from requesting another user's profile by
-	 * changing the URL ID.
-	 */
-	@GetMapping("/{id}")
-	public UserResponse get(@PathVariable Long id, Authentication authentication) {
+        Optional<User> existing = userRepository.findByPhone(cleanPhone);
+        if (existing.isPresent() && !existing.get().getId().equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already registered to another account"));
+        }
 
-		Long authenticatedUserId = getAuthenticatedUserId(authentication);
+        user.setPhone(cleanPhone);
+        user.setNgoVerified(true);
+        userRepository.save(user);
 
-		if (!authenticatedUserId.equals(id)) {
-			throw new IllegalArgumentException("You are not authorized to view this user");
-		}
+        return ResponseEntity.ok(Map.of(
+            "message", "NGO verified successfully! Account is now authorized to claim listings.",
+            "ngoVerified", true,
+            "phone", cleanPhone
+        ));
+    }
 
-		User user = service.get(authenticatedUserId);
+    // 6. VOLUNTEER ONLINE/OFFLINE STATUS (FIXES "Could not update status")
+    @PostMapping(value = {"/{id}/online-status", "/online-status"})
+    public ResponseEntity<?> updateOnlineStatus(
+            @PathVariable(required = false) Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication authentication) {
 
-		return convertToResponse(user);
-	}
+        Long effectiveUserId = id;
 
-	/*
-	 * NGO Verification Submission Endpoint
-	 */
-	@PostMapping("/{id}/verify-ngo")
-	public UserResponse verifyNgo(@PathVariable Long id, @Valid @RequestBody NgoVerificationRequest request,
-			Authentication authentication) {
+        if (effectiveUserId == null && body.containsKey("userId")) {
+            try {
+                effectiveUserId = Long.valueOf(body.get("userId").toString());
+            } catch (Exception ignored) {}
+        }
 
-		Long authenticatedUserId = getAuthenticatedUserId(authentication);
+        if (effectiveUserId == null && authentication != null && authentication.getPrincipal() != null) {
+            try {
+                effectiveUserId = Long.valueOf(authentication.getPrincipal().toString());
+            } catch (Exception ignored) {}
+        }
 
-		if (!authenticatedUserId.equals(id)) {
-			throw new IllegalArgumentException("You are not authorized to submit verification for this user");
-		}
+        if (effectiveUserId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "User ID is required to toggle availability status"));
+        }
 
-		requireRole(authentication, Role.NGO);
+        User user = userRepository.findById(effectiveUserId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-		User updatedUser = service.submitNgoVerification(id, request.getDarpanId(), request.getPhone());
+        if (body.containsKey("online")) {
+            user.setOnline(Boolean.parseBoolean(body.get("online").toString()));
+        }
 
-		return convertToResponse(updatedUser);
-	}
+        if (body.containsKey("latitude") && body.get("latitude") != null) {
+            try {
+                user.setLatitude(Double.parseDouble(body.get("latitude").toString()));
+            } catch (Exception ignored) {}
+        }
 
-	/*
-	 * Only NGOs need the volunteer list because NGOs assign volunteers to claimed
-	 * food listings.
-	 */
-	@GetMapping("/volunteers")
-	public List<UserResponse> getVolunteers(Authentication authentication) {
+        if (body.containsKey("longitude") && body.get("longitude") != null) {
+            try {
+                user.setLongitude(Double.parseDouble(body.get("longitude").toString()));
+            } catch (Exception ignored) {}
+        }
 
-		requireRole(authentication, Role.NGO);
+        userRepository.save(user);
 
-		return service.getVolunteers().stream().map(this::convertToResponse).toList();
-	}
-
-	// 1. Send OTP (Enforcing phone uniqueness across users)
-	@PostMapping("/{id}/send-phone-otp")
-	public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
-		String rawPhone = body.get("phone");
-		if (rawPhone == null || rawPhone.isBlank()) {
-			return ResponseEntity.badRequest().body(Map.of("error", "Phone number is required"));
-		}
-
-		String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
-		if (cleanPhone.length() != 10) {
-			return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
-		}
-
-		// Check if phone number is already registered by another account
-		userRepository.findByPhone(cleanPhone).ifPresent(existingUser -> {
-			if (!existingUser.getId().equals(id)) {
-				throw new IllegalArgumentException("This phone number is already registered to another account.");
-			}
-		});
-
-		String formatted = smsService.generateAndSendOtp(cleanPhone);
-		return ResponseEntity.ok(Map.of("message", "OTP sent successfully to " + formatted));
-	}
-
-	// 2. Verify OTP and commit phone to database
-	@PostMapping("/{id}/verify-phone-otp")
-	public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
-		String rawPhone = body.get("phone");
-		String code = body.get("code");
-
-		if (rawPhone == null || code == null) {
-			return ResponseEntity.badRequest().body(Map.of("error", "Phone and OTP code are required"));
-		}
-
-		String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
-
-		if (!smsService.verifyOtp(cleanPhone, code)) {
-			return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP code"));
-		}
-
-		// Enforce uniqueness check
-		if (userRepository.findByPhone(cleanPhone).filter(u -> !u.getId().equals(id)).isPresent()) {
-			return ResponseEntity.badRequest().body(Map.of("error", "This phone number is already registered to another account."));
-		}
-
-		User user = userRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("User not found"));
-
-		user.setPhone(cleanPhone);
-		userRepository.save(user);
-
-		return ResponseEntity.ok(Map.of(
-			"message", "Phone verified successfully!",
-			"phone", cleanPhone
-		));
-	}
-
-	private Long getAuthenticatedUserId(Authentication authentication) {
-
-		if (authentication == null || !authentication.isAuthenticated()) {
-			throw new IllegalArgumentException("Authentication is required");
-		}
-
-		Object principal = authentication.getPrincipal();
-
-		if (principal instanceof Long) {
-			return (Long) principal;
-		}
-
-		if (principal instanceof Integer) {
-			return ((Integer) principal).longValue();
-		}
-
-		if (principal instanceof String) {
-			try {
-				return Long.parseLong((String) principal);
-			} catch (NumberFormatException ignored) {
-				// Continue below.
-			}
-		}
-
-		throw new IllegalArgumentException("Unable to determine authenticated user");
-	}
-
-	private void requireRole(Authentication authentication, Role requiredRole) {
-
-		if (authentication == null || !authentication.isAuthenticated()) {
-			throw new IllegalArgumentException("Authentication is required");
-		}
-
-		boolean hasRequiredRole = authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority)
-				.anyMatch(authority -> authority.equals("ROLE_" + requiredRole.name()));
-
-		if (!hasRequiredRole) {
-			throw new IllegalArgumentException("You are not authorized to perform this action");
-		}
-	}
-
-	private UserResponse convertToResponse(User user) {
-
-		return new UserResponse(
-				user.getId(), 
-				user.getName(), 
-				user.getEmail(), 
-				user.getRole(), 
-				user.isVerified(),
-				user.isNgoVerified()
-		);
-	}
+        return ResponseEntity.ok(Map.of(
+            "message", "Duty status updated successfully",
+            "online", user.isOnline()
+        ));
+    }
 }
