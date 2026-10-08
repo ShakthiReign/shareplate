@@ -43,10 +43,12 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 2. GET ACTIVE VOLUNTEERS (FOR NGO DISPATCH)
+    // 2. GET ACTIVE VOLUNTEERS (In-memory filter to prevent repository method signature errors)
     @GetMapping("/volunteers")
     public ResponseEntity<List<User>> getOnlineVolunteers() {
-        List<User> volunteers = userRepository.findByRoleAndOnlineTrue(Role.VOLUNTEER);
+        List<User> volunteers = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.VOLUNTEER && u.isOnline())
+                .toList();
         return ResponseEntity.ok(volunteers);
     }
 
@@ -109,7 +111,7 @@ public class UserController {
         ));
     }
 
-    // 5. NGO LEGAL VERIFICATION (FIXES "Authentication is required")
+    // 5. NGO LEGAL VERIFICATION
     @PostMapping("/{id}/verify-ngo")
     public ResponseEntity<?> verifyNgo(
             @PathVariable Long id,
@@ -151,7 +153,7 @@ public class UserController {
         ));
     }
 
-    // 6. VOLUNTEER ONLINE/OFFLINE STATUS (FIXES "Could not update status")
+    // 6. VOLUNTEER ONLINE/OFFLINE STATUS
     @PostMapping(value = {"/{id}/online-status", "/online-status"})
     public ResponseEntity<?> updateOnlineStatus(
             @PathVariable(required = false) Long id,
