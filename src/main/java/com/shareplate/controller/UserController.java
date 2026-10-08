@@ -38,7 +38,7 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 2. GET ACTIVE ONLINE VOLUNTEERS (Safely filters in-memory)
+    // 2. GET ACTIVE ONLINE VOLUNTEERS
     @GetMapping("/volunteers")
     public ResponseEntity<List<User>> getOnlineVolunteers() {
         List<User> volunteers = userRepository.findAll().stream()
@@ -60,7 +60,6 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
         }
 
-        // Check if phone belongs to another account
         Optional<User> existing = userRepository.findByPhone(cleanPhone);
         if (existing.isPresent() && !existing.get().getId().equals(id)) {
             return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
@@ -107,7 +106,7 @@ public class UserController {
         ));
     }
 
-    // 5. NGO LEGAL VERIFICATION (Fixes "Authentication is required")
+    // 5. NGO LEGAL VERIFICATION
     @PostMapping("/{id}/verify-ngo")
     public ResponseEntity<?> verifyNgo(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String darpanId = body.get("darpanId");
@@ -145,7 +144,7 @@ public class UserController {
         ));
     }
 
-    // 6. VOLUNTEER DUTY TOGGLE (Fixes "Could not update status")
+    // 6. VOLUNTEER DUTY TOGGLE
     @PostMapping(value = {"/{id}/online-status", "/online-status"})
     public ResponseEntity<?> updateOnlineStatus(
             @PathVariable(required = false) Long id,
@@ -165,3 +164,28 @@ public class UserController {
 
         User user = userRepository.findById(effectiveUserId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (body.containsKey("online")) {
+            user.setOnline(Boolean.parseBoolean(body.get("online").toString()));
+        }
+
+        if (body.containsKey("latitude") && body.get("latitude") != null) {
+            try {
+                user.setLatitude(Double.parseDouble(body.get("latitude").toString()));
+            } catch (Exception ignored) {}
+        }
+
+        if (body.containsKey("longitude") && body.get("longitude") != null) {
+            try {
+                user.setLongitude(Double.parseDouble(body.get("longitude").toString()));
+            } catch (Exception ignored) {}
+        }
+
+        userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of(
+            "message", "Duty status updated successfully",
+            "online", user.isOnline()
+        ));
+    }
+}
