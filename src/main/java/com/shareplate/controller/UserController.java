@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.shareplate.entity.Role;
 import com.shareplate.entity.User;
 import com.shareplate.repository.UserRepository;
+import com.shareplate.service.EmailVerificationService;
 import com.shareplate.service.SmsService;
 import com.shareplate.service.UserService;
 
@@ -24,11 +25,14 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app", "https://shareplate-kzf3j6zt6-share-plate.vercel.app", "https://shareplate-3r0hkrk8j-share-plate.vercel.app", "https://shareplate-5tkcvnd29-share-plate.vercel.app"})
+@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app", "https://shareplate-kzf3j6zt6-share-plate.vercel.app", "https://shareplate-3r0hkrk8j-share-plate.vercel.app", "https://shareplate-38iho2jdv-share-plate.vercel.app"})
 public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired(required = false)
+    private EmailVerificationService emailVerificationService;
 
     @Autowired
     private UserRepository userRepository;
@@ -60,7 +64,47 @@ public class UserController {
         }
     }
 
-    // 3. GET SINGLE USER BY ID
+    // 3. VERIFY EMAIL
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String code = body.get("code");
+
+        if (email == null || code == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email and code are required"));
+        }
+
+        try {
+            if (emailVerificationService != null) {
+                emailVerificationService.verifyEmail(email.trim(), code.trim());
+            }
+            return ResponseEntity.ok(Map.of("message", "Email verified successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Invalid or expired verification code"));
+        }
+    }
+
+    // 4. RESEND VERIFICATION CODE
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+        }
+
+        try {
+            if (emailVerificationService != null) {
+                emailVerificationService.resendVerificationCode(email.trim());
+            }
+            return ResponseEntity.ok(Map.of("message", "Verification code resent"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Could not resend verification code"));
+        }
+    }
+
+    // 5. GET SINGLE USER BY ID
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         return userRepository.findById(id)
@@ -68,7 +112,7 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 4. GET ONLINE VOLUNTEERS
+    // 6. GET ONLINE VOLUNTEERS
     @GetMapping("/volunteers")
     public ResponseEntity<List<User>> getOnlineVolunteers() {
         List<User> volunteers = userRepository.findAll().stream()
@@ -77,7 +121,7 @@ public class UserController {
         return ResponseEntity.ok(volunteers);
     }
 
-    // 5. SEND PHONE SMS OTP
+    // 7. SEND PHONE SMS OTP
     @PostMapping("/{id}/send-phone-otp")
     public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String rawPhone = body.get("phone");
@@ -103,7 +147,7 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "OTP generated (dev mode fallback)"));
     }
 
-    // 6. VERIFY PHONE OTP & LINK TO ACCOUNT
+    // 8. VERIFY PHONE OTP & LINK TO ACCOUNT
     @PostMapping("/{id}/verify-phone-otp")
     public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String rawPhone = body.get("phone");
@@ -136,7 +180,7 @@ public class UserController {
         ));
     }
 
-    // 7. NGO LEGAL VERIFICATION
+    // 9. NGO LEGAL VERIFICATION
     @PostMapping("/{id}/verify-ngo")
     public ResponseEntity<?> verifyNgo(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String darpanId = body.get("darpanId");
@@ -174,7 +218,7 @@ public class UserController {
         ));
     }
 
-    // 8. VOLUNTEER DUTY TOGGLE
+    // 10. VOLUNTEER DUTY TOGGLE
     @PostMapping(value = {"/{id}/online-status", "/online-status"})
     public ResponseEntity<?> updateOnlineStatus(
             @PathVariable(required = false) Long id,
