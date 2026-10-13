@@ -213,21 +213,36 @@ function App() {
 
     useEffect(() => {
         if (!user || !user.id) return;
-        if (user.role === "VOLUNTEER") {
-            authFetch(`${API}/users/${user.id}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data && typeof data.online === "boolean") {
+        authFetch(`${API}/users/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data) {
+                    let updated = { ...user };
+                    let changed = false;
+
+                    if (typeof data.online === "boolean" && user.role === "VOLUNTEER") {
                         setIsOnline(data.online);
+                        if (updated.online !== data.online) {
+                            updated.online = data.online;
+                            changed = true;
+                        }
                     }
-                    if (data && data.phone && data.phone !== user.phone) {
-                        const updated = { ...user, phone: data.phone };
+                    if (data.phone && data.phone !== user.phone) {
+                        updated.phone = data.phone;
+                        changed = true;
+                    }
+                    if (typeof data.ngoVerified === "boolean" && updated.ngoVerified !== data.ngoVerified) {
+                        updated.ngoVerified = data.ngoVerified;
+                        changed = true;
+                    }
+
+                    if (changed) {
                         setUser(updated);
                         localStorage.setItem("shareplate_user", JSON.stringify(updated));
                     }
-                })
-                .catch(() => {});
-        }
+                }
+            })
+            .catch(() => {});
     }, [user?.id]);
 
     useEffect(() => {
@@ -289,7 +304,6 @@ function App() {
         );
     };
 
-    // FIXED TOGGLE ONLINE STATUS WITH USER ID
     const toggleOnlineStatus = async () => {
         if (!user || !user.id) return;
         setTogglingOnline(true);
@@ -425,7 +439,7 @@ function App() {
         setConfirmNewPasswordVal("");
     };
 
-    // 2-STEP SMS OTP VERIFICATION WORKFLOW
+    // 2-STEP SMS OTP VERIFICATION & NUMBER EDIT WORKFLOW
     const handleSendPhoneOtp = async (e) => {
         e.preventDefault();
         if (!user || !user.id) {
@@ -503,7 +517,6 @@ function App() {
         }
     };
 
-    // FIXED SUBMIT NGO VERIFICATION (RESOLVES "Authentication is required")
     const submitNgoVerification = async (e) => {
         e.preventDefault();
         if (!user || !user.id) {
@@ -836,9 +849,20 @@ function App() {
             }
 
             const authResponse = await response.json();
+            const loggedInUser = authResponse.user || {
+                id: authResponse.id,
+                name: authResponse.name,
+                email: authResponse.email,
+                role: authResponse.role,
+                phone: authResponse.phone || "",
+                ngoVerified: authResponse.ngoVerified || false,
+                darpanId: authResponse.darpanId || null,
+                online: authResponse.online || false
+            };
+
             localStorage.setItem("shareplate_token", authResponse.token);
-            localStorage.setItem("shareplate_user", JSON.stringify(authResponse.user));
-            setUser(authResponse.user);
+            localStorage.setItem("shareplate_user", JSON.stringify(loggedInUser));
+            setUser(loggedInUser);
             setPassword("");
         } catch (error) {
             const message = error?.message || "";
@@ -1062,7 +1086,6 @@ function App() {
         return "";
     };
 
-    // FIXED POST FOOD LISTING (PRESERVES LOCAL WALL-CLOCK IST FORMAT)
     const postFood = async (event) => {
         event.preventDefault();
 
@@ -1087,7 +1110,6 @@ function App() {
         setMsg("");
 
         try {
-            // Formats datetime-local input directly into standard LocalDateTime (YYYY-MM-DDTHH:mm:ss)
             const formattedDeadline = pickupDeadline.length === 16 ? `${pickupDeadline}:00` : pickupDeadline;
 
             const payload = {
@@ -1517,9 +1539,25 @@ function App() {
                                 <span>📋</span> Active Dashboard
                             </div>
 
-                            {!user.phone && (
-                                <div className="nav-item highlight-nav" onClick={() => { setMenuOpen(false); setActiveModal("phone-setup"); }}>
-                                    <span>📱</span> Finish Setting Up Phone
+                            {!user.phone ? (
+                                <div className="nav-item highlight-nav" onClick={() => {
+                                    setPhoneStep("ENTER_PHONE");
+                                    setSetupPhone("");
+                                    setPhoneVerifyMsg("");
+                                    setMenuOpen(false);
+                                    setActiveModal("phone-setup");
+                                }}>
+                                    <span>📱</span> Complete Profile Setup (Phone)
+                                </div>
+                            ) : (
+                                <div className="nav-item" onClick={() => {
+                                    setPhoneStep("ENTER_PHONE");
+                                    setSetupPhone(user.phone || "");
+                                    setPhoneVerifyMsg("");
+                                    setMenuOpen(false);
+                                    setActiveModal("phone-setup");
+                                }}>
+                                    <span>📞</span> Change Mobile (+91 {user.phone})
                                 </div>
                             )}
 
@@ -1561,7 +1599,7 @@ function App() {
                     <div className="modal-card" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3>
-                                {activeModal === "phone-setup" && "SMS Phone Verification"}
+                                {activeModal === "phone-setup" && (user.phone ? "Change Mobile Number" : "SMS Phone Verification")}
                                 {activeModal === "ngo-verify" && "NGO Legal Verification"}
                                 {activeModal === "profile" && "Profile & Avatar Customization"}
                                 {activeModal === "history" && `${user.role} Rescue Activity History`}
@@ -1574,7 +1612,9 @@ function App() {
                         {activeModal === "phone-setup" && (
                             <div className="modal-body">
                                 <p className="history-intro">
-                                    Verify your mobile number via SMS OTP to enable direct call coordination during pickups. Each mobile number is unique and linked to one account only.
+                                    {user.phone
+                                        ? `Your current verified phone is +91 ${user.phone}. Enter a new 10-digit number below to verify and update it.`
+                                        : "Verify your mobile number via SMS OTP to enable direct call coordination during pickups. Each mobile number is unique and linked to one account only."}
                                 </p>
 
                                 {phoneStep === "ENTER_PHONE" ? (
@@ -1594,7 +1634,7 @@ function App() {
                                         </small>
 
                                         <button className="primary submit-large" type="submit" disabled={phoneVerifyLoading}>
-                                            {phoneVerifyLoading ? "Sending SMS OTP..." : "Send Verification Code"}
+                                            {phoneVerifyLoading ? "Sending SMS OTP..." : user.phone ? "Send Code for New Number" : "Send Verification Code"}
                                         </button>
                                     </form>
                                 ) : (
@@ -1707,6 +1747,23 @@ function App() {
                                         <span className="role-tag">{user.role}</span>
                                     </div>
                                 </div>
+
+                                {user.phone && (
+                                    <div style={{ marginTop: "10px", marginBottom: "16px" }}>
+                                        <button
+                                            type="button"
+                                            className="text-link-button"
+                                            onClick={() => {
+                                                setSetupPhone(user.phone || "");
+                                                setPhoneStep("ENTER_PHONE");
+                                                setPhoneVerifyMsg("");
+                                                setActiveModal("phone-setup");
+                                            }}
+                                        >
+                                            Change Linked Mobile Number ↗
+                                        </button>
+                                    </div>
+                                )}
 
                                 <label>Choose Avatar Icon</label>
                                 <div className="avatar-preset-grid">
@@ -2149,14 +2206,19 @@ function App() {
                             </div>
                         </section>
 
-                        {/* PROMPT BANNER FOR INCOMPLETE PHONE SETUP */}
-                        {!user.phone && (
+                        {/* PROMPT BANNER FOR INCOMPLETE PHONE SETUP - ONLY DISPLAYED IF NO PHONE EXISTS */}
+                        {(!user.phone || user.phone.trim() === "") && (
                             <div className="setup-alert-banner">
                                 <div>
                                     <strong>Complete your profile setup</strong>
                                     <span>Please verify your unique mobile number to coordinate pickups smoothly.</span>
                                 </div>
-                                <button className="primary setup-btn" onClick={() => setActiveModal("phone-setup")}>
+                                <button className="primary setup-btn" onClick={() => {
+                                    setPhoneStep("ENTER_PHONE");
+                                    setSetupPhone("");
+                                    setPhoneVerifyMsg("");
+                                    setActiveModal("phone-setup");
+                                }}>
                                     Finish Setup
                                 </button>
                             </div>
