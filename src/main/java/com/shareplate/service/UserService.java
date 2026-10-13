@@ -1,8 +1,9 @@
 package com.shareplate.service;
 
-import java.util.List;
 import java.util.regex.Pattern;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.shareplate.controller.LoginRequest;
 import com.shareplate.controller.RegisterRequest;
 import com.shareplate.dto.AuthResponse;
-import com.shareplate.entity.Role;
 import com.shareplate.entity.User;
 import com.shareplate.repository.UserRepository;
 
@@ -27,8 +27,11 @@ public class UserService {
 	private final PasswordEncoder encoder;
 	private final JwtService jwtService;
 
-	public UserService(UserRepository repo, PasswordEncoder encoder, JwtService jwtService) {
+	@Autowired
+	@Lazy
+	private EmailVerificationService emailVerificationService;
 
+	public UserService(UserRepository repo, PasswordEncoder encoder, JwtService jwtService) {
 		this.repo = repo;
 		this.encoder = encoder;
 		this.jwtService = jwtService;
@@ -50,21 +53,33 @@ public class UserService {
 		validatePassword(request.getPassword());
 
 		User user = new User();
-
 		user.setName(request.getName() != null ? request.getName().trim() : "");
 		user.setEmail(email);
 		user.setPassword(encoder.encode(request.getPassword()));
 		user.setRole(request.getRole());
-
 		user.setVerified(false);
 		user.setNgoVerified(false);
+		user.setOnline(false);
 
-		return repo.save(user);
-	}
+		// Keep null so PostgreSQL's unique constraint uk_users_phone doesn't conflict on empty strings
+		if (request.getPhone() != null && !request.getPhone().isBlank()) {
+			String cleanPhone = request.getPhone().replaceAll("\\D", "").replaceFirst("^91", "");
+			if (cleanPhone.length() == 10) {
+				user.setPhone(cleanPhone);
+			}
+		}
 
-	public User get(Long id) {
+		User saved = repo.save(user);
 
-		return repo.findById(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+		if (emailVerificationService != null) {
+			try {
+				emailVerificationService.createAndSendVerificationCode(saved);
+			} catch (Exception e) {
+				System.err.println("Failed to send verification email: " + e.getMessage());
+			}
+		}
+
+		return saved;
 	}
 
 	public AuthResponse login(LoginRequest request) {
@@ -83,34 +98,25 @@ public class UserService {
 		}
 
 		if (!user.isVerified()) {
-			throw new IllegalArgumentException("Please verify your email before logging in");
+			if (emailVerificationService != null) {
+				try {
+					emailVerificationService.resendVerificationCode(user.getEmail());
+				} catch (Exception ignored) {}
+			}
+			throw new IllegalArgumentException("Please verify your email before signing in");
 		}
 
 		String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getRole().name());
 
-		return new AuthResponse(user.getId(), user.getName(), user.getEmail(), user.getRole(), user.isVerified(),
-				user.isNgoVerified(), token);
-	}
-
-	@Transactional
-	public User submitNgoVerification(Long userId, String darpanId, String phone) {
-
-		User user = repo.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-		if (user.getRole() != Role.NGO) {
-			throw new IllegalArgumentException("Only NGO accounts can submit NGO verification credentials");
-		}
-
-		user.setDarpanId(darpanId.trim().toUpperCase());
-		user.setPhone(phone.trim());
-		user.setNgoVerified(true);
-
-		return repo.save(user);
-	}
-
-	public List<User> getVolunteers() {
-
-		return repo.findByRole(Role.VOLUNTEER);
+		return new AuthResponse(
+				user.getId(),
+				user.getName(),
+				user.getEmail(),
+				user.getRole(),
+				user.isVerified(),
+				user.isNgoVerified(),
+				token
+		);
 	}
 
 	private void validatePassword(String password) {
@@ -125,7 +131,7 @@ public class UserService {
 
 		if (!PASSWORD_PATTERN.matcher(password).matches()) {
 			throw new IllegalArgumentException(
-					"Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+					"Password must contain uppercase, lowercase, number, and special character");
 		}
 	}
 }

@@ -48,7 +48,6 @@ public class EmailVerificationService {
 		String code = generateCode();
 
 		EmailVerificationToken token = new EmailVerificationToken();
-
 		token.setUser(user);
 		token.setTokenHash(encoder.encode(code));
 		token.setExpiresAt(LocalDateTime.now().plusMinutes(CODE_EXPIRY_MINUTES));
@@ -57,7 +56,19 @@ public class EmailVerificationService {
 
 		tokenRepository.save(token);
 
-		emailService.sendVerificationEmail(user.getEmail(), user.getName(), code);
+		// PRINT TO RENDER CONSOLE (Fail-safe visibility)
+		System.out.println("=================================================");
+		System.out.println(">>> SHAREPLATE EMAIL OTP FOR: " + user.getEmail());
+		System.out.println(">>> 6-DIGIT CODE: " + code);
+		System.out.println("=================================================");
+
+		try {
+			if (emailService != null) {
+				emailService.sendVerificationEmail(user.getEmail(), user.getName(), code);
+			}
+		} catch (Exception e) {
+			System.err.println("Could not dispatch SMTP email: " + e.getMessage());
+		}
 	}
 
 	@Transactional
@@ -81,7 +92,6 @@ public class EmailVerificationService {
 
 		if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
 			tokenRepository.delete(token);
-
 			throw new IllegalArgumentException("Verification code has expired");
 		}
 
@@ -93,7 +103,6 @@ public class EmailVerificationService {
 
 		if (!encoder.matches(code, token.getTokenHash())) {
 			tokenRepository.save(token);
-
 			throw new IllegalArgumentException("Invalid verification code");
 		}
 
@@ -111,7 +120,7 @@ public class EmailVerificationService {
 
 		User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
 				.orElseThrow(() -> new IllegalArgumentException(
-						"If an account exists for this email, " + "a verification code will be sent"));
+						"If an account exists for this email, a verification code will be sent"));
 
 		if (user.isVerified()) {
 			throw new IllegalArgumentException("Email is already verified");

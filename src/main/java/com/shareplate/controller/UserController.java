@@ -12,12 +12,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.shareplate.entity.Role;
 import com.shareplate.entity.User;
 import com.shareplate.repository.UserRepository;
 import com.shareplate.service.EmailVerificationService;
+import com.shareplate.service.PasswordResetService;
 import com.shareplate.service.SmsService;
 import com.shareplate.service.UserService;
 
@@ -25,7 +27,7 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app", "https://shareplate-kzf3j6zt6-share-plate.vercel.app", "https://shareplate-3r0hkrk8j-share-plate.vercel.app", "https://shareplate-38iho2jdv-share-plate.vercel.app"})
+@CrossOrigin(origins = {"http://localhost:5173", "https://shareplate-green.vercel.app"})
 public class UserController {
 
     @Autowired
@@ -35,12 +37,14 @@ public class UserController {
     private EmailVerificationService emailVerificationService;
 
     @Autowired
+    private PasswordResetService passwordResetService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired(required = false)
     private SmsService smsService;
 
-    // 1. REGISTER
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
@@ -52,7 +56,6 @@ public class UserController {
         }
     }
 
-    // 2. LOGIN
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
         try {
@@ -64,7 +67,6 @@ public class UserController {
         }
     }
 
-    // 3. VERIFY EMAIL
     @PostMapping("/verify-email")
     public ResponseEntity<?> verifyEmail(@RequestBody Map<String, String> body) {
         String email = body.get("email");
@@ -86,7 +88,6 @@ public class UserController {
         }
     }
 
-    // 4. RESEND VERIFICATION CODE
     @PostMapping("/resend-verification")
     public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> body) {
         String email = body.get("email");
@@ -104,7 +105,36 @@ public class UserController {
         }
     }
 
-    // 5. GET SINGLE USER BY ID
+    // Endpoints for Password Reset (matching main.jsx lines 256, 381, 411)
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email != null && !email.isBlank()) {
+            passwordResetService.requestPasswordReset(email.trim());
+        }
+        return ResponseEntity.ok(Map.of("message", "If an account exists for this email, a password reset link has been sent."));
+    }
+
+    @GetMapping("/validate-reset-token")
+    public ResponseEntity<?> validateResetToken(@RequestParam String token) {
+        try {
+            passwordResetService.validateResetToken(token);
+            return ResponseEntity.ok(Map.of("valid", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        try {
+            passwordResetService.resetPassword(request);
+            return ResponseEntity.ok(Map.of("message", "Password reset successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         return userRepository.findById(id)
@@ -112,7 +142,6 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 6. GET ONLINE VOLUNTEERS
     @GetMapping("/volunteers")
     public ResponseEntity<List<User>> getOnlineVolunteers() {
         List<User> volunteers = userRepository.findAll().stream()
@@ -121,7 +150,6 @@ public class UserController {
         return ResponseEntity.ok(volunteers);
     }
 
-    // 7. SEND PHONE SMS OTP
     @PostMapping("/{id}/send-phone-otp")
     public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String rawPhone = body.get("phone");
@@ -147,7 +175,6 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "OTP generated (dev mode fallback)"));
     }
 
-    // 8. VERIFY PHONE OTP & LINK TO ACCOUNT
     @PostMapping("/{id}/verify-phone-otp")
     public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String rawPhone = body.get("phone");
@@ -180,7 +207,6 @@ public class UserController {
         ));
     }
 
-    // 9. NGO LEGAL VERIFICATION
     @PostMapping("/{id}/verify-ngo")
     public ResponseEntity<?> verifyNgo(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String darpanId = body.get("darpanId");
@@ -208,6 +234,7 @@ public class UserController {
         }
 
         user.setPhone(cleanPhone);
+        user.setDarpanId(darpanId.trim());
         user.setNgoVerified(true);
         userRepository.save(user);
 
@@ -218,7 +245,6 @@ public class UserController {
         ));
     }
 
-    // 10. VOLUNTEER DUTY TOGGLE
     @PostMapping(value = {"/{id}/online-status", "/online-status"})
     public ResponseEntity<?> updateOnlineStatus(
             @PathVariable(required = false) Long id,
