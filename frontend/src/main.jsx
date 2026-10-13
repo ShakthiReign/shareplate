@@ -1624,7 +1624,7 @@ function App() {
                                             type="tel"
                                             pattern="[0-9]{10}"
                                             maxLength="10"
-                                            placeholder="e.g. 9994199885"
+                                            placeholder="e.g. 9876543210"
                                             value={setupPhone}
                                             onChange={(e) => setSetupPhone(e.target.value.replace(/\D/g, ""))}
                                             required
