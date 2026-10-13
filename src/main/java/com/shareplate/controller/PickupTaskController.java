@@ -168,8 +168,11 @@ public class PickupTaskController {
 
 		for (GrantedAuthority authority : authentication.getAuthorities()) {
 			String name = authority.getAuthority();
-			if (name != null && name.startsWith("ROLE_")) {
-				return name.substring("ROLE_".length());
+			if (name != null) {
+				if (name.startsWith("ROLE_")) {
+					return name.substring("ROLE_".length()).trim();
+				}
+				return name.trim();
 			}
 		}
 
@@ -179,11 +182,13 @@ public class PickupTaskController {
 	private void requireRole(Authentication authentication, String expectedRole) {
 
 		String actualRole = getRole(authentication);
-		if (!expectedRole.equals(actualRole)) {
-			throw new IllegalArgumentException("Only " + expectedRole + " users can perform this action");
+		String cleanExpected = expectedRole.startsWith("ROLE_") ? expectedRole.substring(5) : expectedRole;
+		String cleanActual = actualRole.startsWith("ROLE_") ? actualRole.substring(5) : actualRole;
+
+		if (!cleanExpected.equalsIgnoreCase(cleanActual)) {
+			throw new IllegalArgumentException("Only " + cleanExpected + " users can perform this action");
 		}
 	}
-
 	private PickupTaskResponse toResponse(PickupTask task) {
 
 		PickupTaskResponse resp = new PickupTaskResponse(
