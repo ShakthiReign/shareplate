@@ -54,14 +54,16 @@ public class SmsService {
         if (accountSid != null && !accountSid.isBlank() && !accountSid.contains("your_account_sid")) {
             try {
                 Twilio.init(accountSid, authToken);
-                Message.creator(
+                Message message = Message.creator(
                     new PhoneNumber(cleanPhone),
                     new PhoneNumber(fromNumber),
                     "Your SharePlate verification OTP is: " + otp + ". Valid for 5 minutes."
                 ).create();
-                log.info("SMS OTP successfully sent via Twilio to {}", cleanPhone);
+                log.info("SMS OTP successfully sent via Twilio to {}. Message SID: {}", cleanPhone, message.getSid());
             } catch (Exception e) {
-                log.error("Twilio send failed: {}", e.getMessage());
+                log.error("Twilio send failed to {}: {}", cleanPhone, e.getMessage(), e);
+                // Fallback log so you don't get locked out during setup
+                log.info("[BACKUP OTP LOG] Phone: {} | OTP: {}", cleanPhone, otp);
             }
         } else {
             // Direct developer fallback printed in Render console logs
