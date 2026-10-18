@@ -1,14 +1,16 @@
 package com.shareplate.service;
 
-import com.twilio.Twilio;
-import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,14 +21,8 @@ public class SmsService {
 
     private static final int OTP_EXPIRY_MINUTES = 5;
 
-    @Value("${twilio.account.sid:}")
-    private String accountSid;
-
-    @Value("${twilio.auth.token:}")
-    private String authToken;
-
-    @Value("${twilio.phone.number:}")
-    private String fromNumber;
+    @Value("${fast2sms.api.key:}")
+    private String apiKey;
 
     // Stores: phone -> {code, expiresAt}
     private final Map<String, OtpEntry> otpStorage = new ConcurrentHashMap<>();
@@ -42,39 +38,45 @@ public class SmsService {
     }
 
     public String generateAndSendOtp(String rawPhone) {
+        // Strip country codes and non-numeric characters to ensure a clean 10-digit number
         String cleanPhone = rawPhone.replaceAll("\\D", "");
-        if (cleanPhone.length() == 10) {
-            cleanPhone = "+91" + cleanPhone;
-        } else if (!cleanPhone.startsWith("+")) {
-            cleanPhone = "+" + cleanPhone;
+        if (cleanPhone.length() > 10) {
+            cleanPhone = cleanPhone.substring(cleanPhone.length() - 10);
         }
 
-        // 6-digit numeric OTP
+        // Generate 6-digit numeric OTP
         String otp = String.format("%06d", new SecureRandom().nextInt(1000000));
         otpStorage.put(cleanPhone, new OtpEntry(otp, System.currentTimeMillis() + (OTP_EXPIRY_MINUTES * 60 * 1000)));
 
-        String messageBody = String.format(
-            "Your Shareplate phone number verification OTP is : %s\nThis OTP is valid for %d minutes.",
-            otp,
-            OTP_EXPIRY_MINUTES
-        );
-
-        if (accountSid != null && !accountSid.isBlank() && !accountSid.contains("your_account_sid")) {
+        if (apiKey != null && !apiKey.isBlank()) {
             try {
-                Twilio.init(accountSid, authToken);
-                Message message = Message.creator(
-                    new PhoneNumber(cleanPhone),
-                    new PhoneNumber(fromNumber),
-                    messageBody
-                ).create();
-                log.info("SMS OTP successfully sent via Twilio to {}. Message SID: {}", cleanPhone, message.getSid());
+                // Fast2SMS dedicated OTP route
+                String requestUrl = "https://www.fast2sms.com/dev/bulkV2?authorization=" + apiKey.trim()
+                        + "&variables_values=" + otp
+                        + "&route=otp"
+                        + "&numbers=" + cleanPhone;
+
+                HttpClient client = HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build();
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(requestUrl))
+                        .header("cache-control", "no-cache")
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                log.info("Fast2SMS OTP dispatched to {}. Response: {}", cleanPhone, response.body());
             } catch (Exception e) {
-                log.error("Twilio send failed to {}: {}", cleanPhone, e.getMessage(), e);
+                log.error("Fast2SMS dispatch failed to {}: {}", cleanPhone, e.getMessage(), e);
                 log.info("[BACKUP OTP LOG] Phone: {} | OTP: {}", cleanPhone, otp);
             }
         } else {
+            // Local fallback log if key is not yet set
             log.info("==================================================");
-            log.info("SHAREPLATE DEV SMS OTP for {}: {}", cleanPhone, otp);
+            log.info("SHAREPLATE FAST2SMS DEV OTP for {}: {}", cleanPhone, otp);
             log.info("==================================================");
         }
 
@@ -83,8 +85,9 @@ public class SmsService {
 
     public boolean verifyOtp(String rawPhone, String code) {
         String cleanPhone = rawPhone.replaceAll("\\D", "");
-        if (cleanPhone.length() == 10) cleanPhone = "+91" + cleanPhone;
-        else if (!cleanPhone.startsWith("+")) cleanPhone = "+" + cleanPhone;
+        if (cleanPhone.length() > 10) {
+            cleanPhone = cleanPhone.substring(cleanPhone.length() - 10);
+        }
 
         OtpEntry entry = otpStorage.get(cleanPhone);
         if (entry == null) return false;
