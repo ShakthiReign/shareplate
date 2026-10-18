@@ -17,6 +17,8 @@ public class SmsService {
 
     private static final Logger log = LoggerFactory.getLogger(SmsService.class);
 
+    private static final int OTP_EXPIRY_MINUTES = 5;
+
     @Value("${twilio.account.sid:}")
     private String accountSid;
 
@@ -49,7 +51,13 @@ public class SmsService {
 
         // 6-digit numeric OTP
         String otp = String.format("%06d", new SecureRandom().nextInt(1000000));
-        otpStorage.put(cleanPhone, new OtpEntry(otp, System.currentTimeMillis() + (5 * 60 * 1000)));
+        otpStorage.put(cleanPhone, new OtpEntry(otp, System.currentTimeMillis() + (OTP_EXPIRY_MINUTES * 60 * 1000)));
+
+        String messageBody = String.format(
+            "Your Shareplate phone number verification OTP is : %s\nThis OTP is valid for %d minutes.",
+            otp,
+            OTP_EXPIRY_MINUTES
+        );
 
         if (accountSid != null && !accountSid.isBlank() && !accountSid.contains("your_account_sid")) {
             try {
@@ -57,16 +65,14 @@ public class SmsService {
                 Message message = Message.creator(
                     new PhoneNumber(cleanPhone),
                     new PhoneNumber(fromNumber),
-                    "Your SharePlate verification OTP is: " + otp + ". Valid for 5 minutes."
+                    messageBody
                 ).create();
                 log.info("SMS OTP successfully sent via Twilio to {}. Message SID: {}", cleanPhone, message.getSid());
             } catch (Exception e) {
                 log.error("Twilio send failed to {}: {}", cleanPhone, e.getMessage(), e);
-                // Fallback log so you don't get locked out during setup
                 log.info("[BACKUP OTP LOG] Phone: {} | OTP: {}", cleanPhone, otp);
             }
         } else {
-            // Direct developer fallback printed in Render console logs
             log.info("==================================================");
             log.info("SHAREPLATE DEV SMS OTP for {}: {}", cleanPhone, otp);
             log.info("==================================================");
