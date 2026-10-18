@@ -6,9 +6,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Map;
@@ -38,22 +40,27 @@ public class SmsService {
     }
 
     public String generateAndSendOtp(String rawPhone) {
-        // Strip country codes and non-numeric characters to ensure a clean 10-digit number
         String cleanPhone = rawPhone.replaceAll("\\D", "");
         if (cleanPhone.length() > 10) {
             cleanPhone = cleanPhone.substring(cleanPhone.length() - 10);
         }
 
-        // Generate 6-digit numeric OTP
         String otp = String.format("%06d", new SecureRandom().nextInt(1000000));
         otpStorage.put(cleanPhone, new OtpEntry(otp, System.currentTimeMillis() + (OTP_EXPIRY_MINUTES * 60 * 1000)));
 
         if (apiKey != null && !apiKey.isBlank()) {
             try {
-                // Fast2SMS dedicated OTP route
+                String smsText = "Your Shareplate phone number verification OTP is : " + otp + 
+                                 "\nThis OTP is valid for " + OTP_EXPIRY_MINUTES + " minutes.";
+
+                String encodedMessage = URLEncoder.encode(smsText, StandardCharsets.UTF_8);
+
+                // Using Fast2SMS Quick Route ('q') which bypasses website/DLT verification
                 String requestUrl = "https://www.fast2sms.com/dev/bulkV2?authorization=" + apiKey.trim()
-                        + "&variables_values=" + otp
-                        + "&route=otp"
+                        + "&route=q"
+                        + "&message=" + encodedMessage
+                        + "&language=english"
+                        + "&flash=0"
                         + "&numbers=" + cleanPhone;
 
                 HttpClient client = HttpClient.newBuilder()
@@ -62,19 +69,18 @@ public class SmsService {
 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(requestUrl))
+                        .header("authorization", apiKey.trim())
                         .header("cache-control", "no-cache")
                         .GET()
                         .build();
 
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
                 log.info("Fast2SMS OTP dispatched to {}. Response: {}", cleanPhone, response.body());
             } catch (Exception e) {
                 log.error("Fast2SMS dispatch failed to {}: {}", cleanPhone, e.getMessage(), e);
                 log.info("[BACKUP OTP LOG] Phone: {} | OTP: {}", cleanPhone, otp);
             }
         } else {
-            // Local fallback log if key is not yet set
             log.info("==================================================");
             log.info("SHAREPLATE FAST2SMS DEV OTP for {}: {}", cleanPhone, otp);
             log.info("==================================================");
