@@ -109,7 +109,7 @@ public class UserController {
         if (email != null && !email.isBlank()) {
             passwordResetService.requestPasswordReset(email.trim());
         }
-        return ResponseEntity.ok(Map.of("message", "If an account exists for this email, a password reset link has been sent."));
+        return ResponseEntity.ok(Map.of("message", "If an account exists for this email, a 6-digit password reset OTP has been sent."));
     }
 
     @GetMapping("/validate-reset-token")
