@@ -22,7 +22,7 @@ import com.shareplate.repository.UserRepository;
 public class PasswordResetService {
 
 	private static final int TOKEN_BYTES = 32;
-	private static final int TOKEN_EXPIRY_MINUTES = 30;
+	private static final int TOKEN_EXPIRY_MINUTES = 10
 	private static final int MAX_ATTEMPTS = 5;
 	private static final int MIN_PASSWORD_LENGTH = 8;
 	private static final int MAX_PASSWORD_LENGTH = 72;
@@ -68,7 +68,7 @@ public class PasswordResetService {
 		 */
 		tokenRepository.deleteByUserId(user.getId());
 
-		String rawToken = generateSecureToken();
+		String rawToken = generateOtp();
 		String tokenHash = hashToken(rawToken);
 
 		PasswordResetToken resetToken = new PasswordResetToken();
@@ -117,7 +117,7 @@ public class PasswordResetService {
 		if (resetToken.getAttempts() >= MAX_ATTEMPTS) {
 			resetToken.setUsed(true);
 			tokenRepository.save(resetToken);
-			throw new IllegalArgumentException("Too many reset attempts. Please request a new password reset link");
+			throw new IllegalArgumentException("Too many reset attempts. Please request a new password reset OTP");
 		}
 
 		User user = resetToken.getUser();
@@ -138,7 +138,7 @@ public class PasswordResetService {
 	private PasswordResetToken findValidToken(String rawToken) {
 
 		if (rawToken == null || rawToken.isBlank()) {
-			throw new IllegalArgumentException("Invalid password reset link");
+			throw new IllegalArgumentException("Invalid password reset OTP");
 		}
 
 		String tokenHash = hashToken(rawToken);
@@ -147,29 +147,26 @@ public class PasswordResetService {
 		 * Direct database lookup by token hash.
 		 */
 		PasswordResetToken resetToken = tokenRepository.findByTokenHash(tokenHash)
-				.orElseThrow(() -> new IllegalArgumentException("Invalid or expired password reset link"));
+				.orElseThrow(() -> new IllegalArgumentException("Invalid or expired password reset OTP"));
 
 		if (resetToken.isUsed()) {
-			throw new IllegalArgumentException("This password reset link has already been used");
+			throw new IllegalArgumentException("This password reset OTP has already been used");
 		}
 
 		if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
 			tokenRepository.delete(resetToken);
-			throw new IllegalArgumentException("This password reset link has expired");
+			throw new IllegalArgumentException("This password reset OTP has expired");
 		}
 
 		if (resetToken.getAttempts() >= MAX_ATTEMPTS) {
-			throw new IllegalArgumentException("Too many reset attempts. Please request a new password reset link");
+			throw new IllegalArgumentException("Too many reset attempts. Please request a new password reset OTP");
 		}
 
 		return resetToken;
 	}
 
-	private String generateSecureToken() {
-
-		byte[] tokenBytes = new byte[TOKEN_BYTES];
-		secureRandom.nextBytes(tokenBytes);
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+	private String generateOtp() {
+		return String.format("%06d", secureRandom.nextInt(1_000_000));
 	}
 
 	private String hashToken(String rawToken) {
