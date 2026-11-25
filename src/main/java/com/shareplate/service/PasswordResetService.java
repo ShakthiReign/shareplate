@@ -126,10 +126,6 @@ public class PasswordResetService {
 
 		validatePassword(newPassword);
 
-		/*
-		 * Record this reset attempt.
-		 */
-		User user = resetToken.getUser();
 
 		/*
 		 * Replace old password with a BCrypt hash.
