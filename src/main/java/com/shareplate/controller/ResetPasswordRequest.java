@@ -1,17 +1,11 @@
 package com.shareplate.controller;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class ResetPasswordRequest {
 
-	@NotBlank(message = "Email is required")
-	private String email;
-
-	@NotBlank(message = "6-digit OTP is required")
-	@Size(min = 6, max = 6, message = "OTP must be 6 digits")
-	@Pattern(regexp = "\\d{6}", message = "OTP must contain exactly 6 digits")
+	@NotBlank(message = "Reset token is required")
 	private String token;
 
 	@NotBlank(message = "New password is required")
@@ -23,10 +17,6 @@ public class ResetPasswordRequest {
 
 	public ResetPasswordRequest() {
 	}
-
-	public String getEmail() { return email; }
-
-	public void setEmail(String email) { this.email = email; }
 
 	public String getToken() {
 		return token;
