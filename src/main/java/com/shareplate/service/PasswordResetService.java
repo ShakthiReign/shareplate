@@ -94,11 +94,28 @@ public class PasswordResetService {
 		findValidToken(rawToken);
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = IllegalArgumentException.class)
 	public void resetPassword(ResetPasswordRequest request) {
 
-		String rawToken = request.getToken();
-		PasswordResetToken resetToken = findValidToken(rawToken);
+		String normalizedEmail = normalizeEmail(request.getEmail());
+		User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
+				.orElseThrow(() -> new IllegalArgumentException("Invalid or expired password reset OTP"));
+		PasswordResetToken resetToken = tokenRepository.findByUserId(user.getId())
+				.orElseThrow(() -> new IllegalArgumentException("Invalid or expired password reset OTP"));
+
+		if (resetToken.isUsed() || resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+			throw new IllegalArgumentException("This password reset OTP is invalid or expired");
+		}
+		if (resetToken.getAttempts() >= MAX_ATTEMPTS) {
+			throw new IllegalArgumentException("Too many attempts. Please request a new OTP");
+		}
+		String submittedHash = hashToken(request.getToken());
+		String storedHash = resetToken.getTokenHash();
+		if (!MessageDigest.isEqual(submittedHash.getBytes(StandardCharsets.UTF_8), storedHash.getBytes(StandardCharsets.UTF_8))) {
+			resetToken.setAttempts(resetToken.getAttempts() + 1);
+			tokenRepository.save(resetToken);
+			throw new IllegalArgumentException("Incorrect OTP. Please try again.");
+		}
 
 		String newPassword = request.getNewPassword();
 		String confirmPassword = request.getConfirmPassword();
@@ -112,14 +129,6 @@ public class PasswordResetService {
 		/*
 		 * Record this reset attempt.
 		 */
-		resetToken.setAttempts(resetToken.getAttempts() + 1);
-
-		if (resetToken.getAttempts() >= MAX_ATTEMPTS) {
-			resetToken.setUsed(true);
-			tokenRepository.save(resetToken);
-			throw new IllegalArgumentException("Too many reset attempts. Please request a new password reset OTP");
-		}
-
 		User user = resetToken.getUser();
 
 		/*
