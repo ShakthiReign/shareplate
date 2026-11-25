@@ -186,6 +186,7 @@ function App() {
   const [quantity, setQuantity] = useState("");
   const [location, setLocation] = useState("");
   const [listingCoords, setListingCoords] = useState({ lat: null, lng: null });
+  const [listingAccuracy, setListingAccuracy] = useState(null);
   const [locatingDonor, setLocatingDonor] = useState(false);
   const [pickupDeadline, setPickupDeadline] = useState("");
   const [safetyDetails, setSafetyDetails] = useState("");
@@ -300,47 +301,109 @@ function App() {
       return;
     }
 
+    setMsg("");
     setLocatingDonor(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setListingCoords({ lat, lng });
+    setListingAccuracy(null);
 
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-          );
-          const data = await res.json();
-          const addr = data.address || {};
-          const street =
-            addr.road ||
-            addr.pedestrian ||
-            addr.suburb ||
-            addr.neighbourhood ||
-            addr.village ||
-            "";
-          const area =
-            addr.city_district || addr.city || addr.town || addr.county || "";
-          const state = addr.state || "";
-          const parts = [street, area, state].filter(Boolean);
-          const formatted =
-            parts.length > 0
-              ? parts.join(", ")
-              : data.display_name?.slice(0, 60) ||
-                `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          setLocation(formatted);
-        } catch {
-          setLocation(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        } finally {
-          setLocatingDonor(false);
+    // Keep the most accurate reading for up to 20 seconds. A reading within
+    // 20 metres is accepted immediately; otherwise the best reading is used
+    // only if it is within 50 metres.
+    let watchId = null;
+    let bestPosition = null;
+    let settled = false;
+
+    const finish = async (position) => {
+      if (settled) return;
+      settled = true;
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      window.clearTimeout(gpsTimer);
+
+      const { latitude: lat, longitude: lng, accuracy } = position.coords;
+      setListingCoords({ lat, lng });
+      setListingAccuracy(Math.round(accuracy));
+
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        );
+        if (!res.ok) throw new Error("Address lookup failed");
+        const data = await res.json();
+        const addr = data.address || {};
+
+        const street = [addr.house_number, addr.road || addr.pedestrian]
+          .filter(Boolean)
+          .join(" ");
+        const locality =
+          addr.neighbourhood ||
+          addr.suburb ||
+          addr.residential ||
+          addr.village ||
+          addr.hamlet ||
+          "";
+        const town =
+          addr.town ||
+          addr.city ||
+          addr.municipality ||
+          addr.county ||
+          "";
+        const parts = [street, locality, town, addr.state, addr.postcode, addr.country]
+          .filter((part, index, all) => part && all.indexOf(part) === index);
+        const formatted =
+          parts.length > 0
+            ? parts.join(", ")
+            : data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setLocation(formatted);
+
+        if (accuracy > 50) {
+          setMsg(`Location captured, but GPS accuracy is about ${Math.round(accuracy)} m. Move outdoors or near a window and try again for a more precise fix.`);
+        } else {
+          setMsg(`GPS captured (±${Math.round(accuracy)} m). Check the address before posting.`);
         }
-      },
-      (err) => {
+      } catch {
+        setLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        setMsg("GPS coordinates captured, but the street address lookup failed. You can still use the coordinates.");
+      } finally {
         setLocatingDonor(false);
-        setMsg("Could not retrieve GPS: " + err.message);
+      }
+    };
+
+    const gpsTimer = window.setTimeout(() => {
+      if (bestPosition && bestPosition.coords.accuracy <= 50) {
+        finish(bestPosition);
+      } else {
+        settled = true;
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        setLocatingDonor(false);
+        const accuracy = bestPosition
+          ? Math.round(bestPosition.coords.accuracy)
+          : null;
+        setMsg(
+          accuracy
+            ? `GPS is still too inaccurate (about ${accuracy} m). Move outdoors, enable device location accuracy, and try again.`
+            : "Could not get a GPS fix. Check location permission and try again outdoors.",
+        );
+      }
+    }, 20000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (
+          !bestPosition ||
+          position.coords.accuracy < bestPosition.coords.accuracy
+        ) {
+          bestPosition = position;
+        }
+        if (position.coords.accuracy <= 20) finish(position);
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(gpsTimer);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        setLocatingDonor(false);
+        setMsg("Could not retrieve GPS: " + error.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 },
     );
   };
 
@@ -2629,11 +2692,10 @@ function App() {
                           placeholder="Address or click GPS button"
                           required
                         />
-                        {listingCoords.lat && (
+                        {listingCoords.lat !== null && (
                           <small className="field-hint gps-active">
-                            ✓ Exact coordinates captured (
-                            {listingCoords.lat.toFixed(5)},{" "}
-                            {listingCoords.lng.toFixed(5)})
+                            ✓ GPS coordinates captured ({listingCoords.lat.toFixed(6)},{" "}
+                            {listingCoords.lng.toFixed(6)}) · Accuracy ±{listingAccuracy ?? "—"} m
                           </small>
                         )}
                       </div>
