@@ -395,51 +395,6 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-
-    if (window.location.pathname === "/reset-password" && token) {
-      setResetToken(token);
-      setShowResetPassword(true);
-      setShowSignup(false);
-      setShowVerification(false);
-      setShowForgotPassword(false);
-      setResetTokenChecking(true);
-      setResetPasswordMessage("");
-
-      fetch(
-        `${API}/users/validate-reset-token?token=${encodeURIComponent(token)}`,
-      )
-        .then(async (response) => {
-          if (!response.ok) {
-            let message = "This password reset link is invalid or expired.";
-            try {
-              const data = await response.json();
-              message = data.error || data.message || message;
-            } catch {}
-            throw new Error(message);
-          }
-        })
-        .catch((error) => {
-          setResetPasswordMessage(
-            error.message || "This password reset link is invalid or expired.",
-          );
-        })
-        .finally(() => setResetTokenChecking(false));
-    }
-  }, []);
-
-  const clearResetRoute = () => {
-    if (window.location.pathname === "/reset-password") {
-      window.history.replaceState(
-        {},
-        document.title,
-        window.location.origin + window.location.pathname,
-      );
-    }
-  };
-
   const copyCode = (code, key) => {
     if (!code || code === "Loading..." || code === "Unavailable") return;
     navigator.clipboard.writeText(code).then(() => {
@@ -606,7 +561,6 @@ function App() {
     setForgotPasswordMessage("");
     setResetPasswordMessage("");
     setLoginMessage("");
-    clearResetRoute();
   };
 
   const requestPasswordReset = async (event) => {
@@ -622,7 +576,7 @@ function App() {
       });
 
       let message =
-        "If an account exists for this email, a password reset link has been sent.";
+        "If an account exists for this email, a password reset OTP has been sent.";
       try {
         const data = await response.json();
         message = data.message || data.error || message;
@@ -630,6 +584,12 @@ function App() {
 
       if (!response.ok) throw new Error(message);
       setForgotPasswordMessage(message);
+      setResetToken("");
+      setResetPassword("");
+      setResetConfirmPassword("");
+      setResetPasswordMessage("");
+      setShowForgotPassword(false);
+      setShowResetPassword(true);
     } catch (error) {
       setForgotPasswordMessage(
         error.message || "Could not process the password reset request.",
@@ -681,8 +641,7 @@ function App() {
       setEmail("");
       setPassword("");
       setResetPasswordMessage("");
-      clearResetRoute();
-      setShowResetPassword(false);
+        setShowResetPassword(false);
       setLoginMessage("Password reset successfully. You can now sign in.");
     } catch (error) {
       setResetPasswordMessage(
@@ -2064,13 +2023,25 @@ function App() {
                     className="primary submit-large"
                     onClick={openForgotPassword}
                   >
-                    Request a new link
+                    Request a new OTP
                   </button>
                 </>
               ) : (
                 <>
-                  <p>Choose a new password for your SharePlate account.</p>
+                  <p>Enter the 6-digit OTP sent to your email, then choose a new password.</p>
                   <form onSubmit={resetPasswordSubmit}>
+                    <label>Email verification OTP</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      value={resetToken}
+                      onChange={(event) => setResetToken(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Enter 6-digit OTP"
+                      required
+                    />
                     <label>New password</label>
                     <input
                       type="password"
@@ -2151,8 +2122,8 @@ function App() {
                   disabled={forgotPasswordLoading}
                 >
                   {forgotPasswordLoading
-                    ? "Sending reset link..."
-                    : "Send Reset Link"}
+                    ? "Sending OTP..."
+                    : "Send OTP"}
                 </button>
               </form>
               {forgotPasswordMessage && (
