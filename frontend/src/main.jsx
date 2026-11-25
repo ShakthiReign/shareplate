@@ -622,6 +622,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          email: forgotPasswordEmail.trim(),
           token: resetToken,
           newPassword: resetPassword,
           confirmPassword: resetConfirmPassword,
