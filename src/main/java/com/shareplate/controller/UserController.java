@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -147,7 +148,12 @@ public class UserController {
     }
 
     @PostMapping("/{id}/phone")
-    public ResponseEntity<?> savePhone(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> savePhone(@PathVariable Long id, @RequestBody Map<String, String> body, Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof Long authenticatedUserId)
+                || !authenticatedUserId.equals(id)) {
+            return ResponseEntity.status(403).body(Map.of("error", "You can only update your own phone number"));
+        }
+
         String rawPhone = body.get("phone");
         if (rawPhone == null || rawPhone.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Phone number is required"));
