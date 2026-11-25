@@ -2132,7 +2132,7 @@ function App() {
               <h2>Forgot your password?</h2>
               <p>
                 Enter the email address linked to your SharePlate account. If an
-                account exists, we'll send a 6-digit password reset OTP.
+                account exists, we'll send you a secure password reset link.
               </p>
               <form onSubmit={requestPasswordReset}>
                 <label>Email</label>
@@ -2151,8 +2151,8 @@ function App() {
                   disabled={forgotPasswordLoading}
                 >
                   {forgotPasswordLoading
-                    ? "Sending OTP..."
-                    : "Send OTP"}
+                    ? "Sending reset link..."
+                    : "Send Reset Link"}
                 </button>
               </form>
               {forgotPasswordMessage && (
