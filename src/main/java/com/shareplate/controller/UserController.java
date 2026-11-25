@@ -20,7 +20,6 @@ import com.shareplate.entity.User;
 import com.shareplate.repository.UserRepository;
 import com.shareplate.service.EmailVerificationService;
 import com.shareplate.service.PasswordResetService;
-import com.shareplate.service.SmsService;
 import com.shareplate.service.UserService;
 
 import jakarta.validation.Valid;
@@ -41,9 +40,6 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
-
-    @Autowired(required = false)
-    private SmsService smsService;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
@@ -150,8 +146,8 @@ public class UserController {
         return ResponseEntity.ok(volunteers);
     }
 
-    @PostMapping("/{id}/send-phone-otp")
-    public ResponseEntity<?> sendPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    @PostMapping("/{id}/phone")
+    public ResponseEntity<?> savePhone(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String rawPhone = body.get("phone");
         if (rawPhone == null || rawPhone.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Phone number is required"));
@@ -162,47 +158,19 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("error", "Enter a valid 10-digit mobile number"));
         }
 
-        Optional<User> existing = userRepository.findByPhone(cleanPhone);
-        if (existing.isPresent() && !existing.get().getId().equals(id)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
-        }
-
-        if (smsService != null) {
-            String formatted = smsService.generateAndSendOtp(cleanPhone);
-            return ResponseEntity.ok(Map.of("message", "OTP sent successfully to " + formatted));
-        }
-
-        return ResponseEntity.ok(Map.of("message", "OTP generated (dev mode fallback)"));
-    }
-
-    @PostMapping("/{id}/verify-phone-otp")
-    public ResponseEntity<?> verifyPhoneOtp(@PathVariable Long id, @RequestBody Map<String, String> body) {
-        String rawPhone = body.get("phone");
-        String code = body.get("code");
-
-        if (rawPhone == null || code == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Phone and OTP code are required"));
-        }
-
-        String cleanPhone = rawPhone.replaceAll("\\D", "").replaceFirst("^91", "");
-
-        if (smsService != null && !smsService.verifyOtp(cleanPhone, code)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP code"));
-        }
-
-        Optional<User> existing = userRepository.findByPhone(cleanPhone);
-        if (existing.isPresent() && !existing.get().getId().equals(id)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
-        }
-
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Optional<User> existing = userRepository.findByPhone(cleanPhone);
+        if (existing.isPresent() && !existing.get().getId().equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This mobile number is already linked to another account"));
+        }
 
         user.setPhone(cleanPhone);
         userRepository.save(user);
 
         return ResponseEntity.ok(Map.of(
-            "message", "Phone verified and linked successfully!",
+            "message", "Phone number saved successfully",
             "phone", cleanPhone
         ));
     }
