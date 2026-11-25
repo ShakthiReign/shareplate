@@ -100,10 +100,8 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
 
-  // PHONE SMS OTP VERIFICATION
-  const [phoneStep, setPhoneStep] = useState("ENTER_PHONE");
+  // PHONE NUMBER MANAGEMENT (NO SMS OTP)
   const [setupPhone, setSetupPhone] = useState("");
-  const [phoneOtp, setPhoneOtp] = useState(["", "", "", "", "", ""]);
   const [phoneVerifyLoading, setPhoneVerifyLoading] = useState(false);
   const [phoneVerifyMsg, setPhoneVerifyMsg] = useState("");
 
@@ -492,13 +490,17 @@ function App() {
     setConfirmNewPasswordVal("");
   };
 
-  // 2-STEP SMS OTP VERIFICATION & NUMBER EDIT WORKFLOW
-  const handleSendPhoneOtp = async (e) => {
+  // Save or update a phone number directly without SMS verification
+  const handleSavePhone = async (e) => {
     e.preventDefault();
     if (!user || !user.id) {
-      setPhoneVerifyMsg(
-        "Please sign out and sign in again to refresh your session.",
-      );
+      setPhoneVerifyMsg("Please sign out and sign in again to refresh your session.");
+      return;
+    }
+
+    const clean = setupPhone.replace(/\D/g, "");
+    if (clean.length !== 10) {
+      setPhoneVerifyMsg("Enter a valid 10-digit mobile number.");
       return;
     }
 
@@ -506,72 +508,26 @@ function App() {
     setPhoneVerifyMsg("");
 
     try {
-      const clean = setupPhone.replace(/\D/g, "");
-      if (clean.length !== 10)
-        throw new Error("Enter a valid 10-digit mobile number.");
-
-      const res = await authFetch(`${API}/users/${user.id}/send-phone-otp`, {
+      const res = await authFetch(`${API}/users/${user.id}/phone`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: clean }),
       });
-
       const data = await res.json();
-      if (!res.ok)
-        throw new Error(
-          data.error || data.message || "Failed to send SMS OTP.",
-        );
+      if (!res.ok) {
+        throw new Error(data.error || data.message || "Could not save phone number.");
+      }
 
-      setPhoneStep("ENTER_OTP");
-      setPhoneVerifyMsg(`Verification OTP sent to +91 ${clean}`);
-    } catch (err) {
-      setPhoneVerifyMsg(err.message || "Could not send SMS code.");
-    } finally {
-      setPhoneVerifyLoading(false);
-    }
-  };
-
-  const handleVerifyPhoneOtp = async (e) => {
-    e.preventDefault();
-    if (!user || !user.id) {
-      setPhoneVerifyMsg("Session expired. Please sign in again.");
-      return;
-    }
-
-    const code = phoneOtp.join("");
-    if (code.length !== 6) {
-      setPhoneVerifyMsg("Please enter all 6 digits of the OTP.");
-      return;
-    }
-
-    setPhoneVerifyLoading(true);
-    setPhoneVerifyMsg("");
-
-    try {
-      const clean = setupPhone.replace(/\D/g, "");
-      const res = await authFetch(`${API}/users/${user.id}/verify-phone-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: clean, code }),
-      });
-
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error || data.message || "Invalid OTP code.");
-
-      const updatedUser = { ...user, phone: clean };
+      const updatedUser = { ...user, phone: data.phone || clean };
       setUser(updatedUser);
       localStorage.setItem("shareplate_user", JSON.stringify(updatedUser));
-
-      setPhoneVerifyMsg("Phone verified and saved to account successfully! ✓");
+      setPhoneVerifyMsg("Phone number saved successfully! ✓");
       setTimeout(() => {
         setActiveModal(null);
-        setPhoneStep("ENTER_PHONE");
-        setPhoneOtp(["", "", "", "", "", ""]);
         setPhoneVerifyMsg("");
-      }, 1200);
+      }, 1000);
     } catch (err) {
-      setPhoneVerifyMsg(err.message || "Verification failed.");
+      setPhoneVerifyMsg(err.message || "Could not save phone number.");
     } finally {
       setPhoneVerifyLoading(false);
     }
@@ -1699,7 +1655,6 @@ function App() {
                 <div
                   className="nav-item highlight-nav"
                   onClick={() => {
-                    setPhoneStep("ENTER_PHONE");
                     setSetupPhone("");
                     setPhoneVerifyMsg("");
                     setMenuOpen(false);
@@ -1712,7 +1667,6 @@ function App() {
                 <div
                   className="nav-item"
                   onClick={() => {
-                    setPhoneStep("ENTER_PHONE");
                     setSetupPhone(user.phone || "");
                     setPhoneVerifyMsg("");
                     setMenuOpen(false);
@@ -1795,7 +1749,7 @@ function App() {
                 {activeModal === "phone-setup" &&
                   (user.phone
                     ? "Change Mobile Number"
-                    : "SMS Phone Verification")}
+                    : "Add Mobile Number")}
                 {activeModal === "ngo-verify" && "NGO Legal Verification"}
                 {activeModal === "profile" && "Profile & Avatar Customization"}
                 {activeModal === "history" &&
@@ -1810,120 +1764,46 @@ function App() {
               </button>
             </div>
 
-            {/* 2-STEP SMS OTP VERIFICATION MODAL */}
+            {/* PHONE NUMBER SETTINGS - NO SMS OTP */}
             {activeModal === "phone-setup" && (
               <div className="modal-body">
                 <p className="history-intro">
                   {user.phone
-                    ? `Your current verified phone is +91 ${user.phone}. Enter a new 10-digit number below to verify and update it.`
-                    : "Verify your mobile number via SMS OTP to enable direct call coordination during pickups. Each mobile number is unique and linked to one account only."}
+                    ? `Your current mobile number is +91 ${user.phone}. Enter a new 10-digit number to update it.`
+                    : "Add your 10-digit mobile number for direct call coordination during pickups. Each mobile number can be linked to only one account."}
                 </p>
 
-                {phoneStep === "ENTER_PHONE" ? (
-                  <form onSubmit={handleSendPhoneOtp} className="security-form">
-                    <label>10-Digit Mobile Number</label>
-                    <input
-                      type="tel"
-                      pattern="[0-9]{10}"
-                      maxLength="10"
-                      placeholder="e.g. 9876543210"
-                      value={setupPhone}
-                      onChange={(e) =>
-                        setSetupPhone(e.target.value.replace(/\D/g, ""))
-                      }
-                      autoFocus
-                      required
-                    />
-                    <small className="field-hint">
-                      Format: 10-digit phone number (receives 6-digit SMS OTP).
-                    </small>
+                <form onSubmit={handleSavePhone} className="security-form">
+                  <label>10-Digit Mobile Number</label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength="10"
+                    placeholder="e.g. 9876543210"
+                    value={setupPhone}
+                    onChange={(e) =>
+                      setSetupPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                    }
+                    autoFocus
+                    required
+                  />
+                  <small className="field-hint">
+                    Enter a valid 10-digit mobile number. No SMS OTP is required.
+                  </small>
 
-                    <button
-                      className="primary submit-large"
-                      type="submit"
-                      disabled={phoneVerifyLoading}
-                    >
-                      {phoneVerifyLoading
-                        ? "Sending SMS OTP..."
-                        : user.phone
-                          ? "Send Code for New Number"
-                          : "Send Verification Code"}
-                    </button>
-                  </form>
-                ) : (
-                  <div>
-                    <form
-                      onSubmit={handleVerifyPhoneOtp}
-                      className="security-form"
-                    >
-                      <label>
-                        Enter 6-Digit SMS Code sent to +91 {setupPhone}
-                      </label>
-                      <div className="otp-grid">
-                        {phoneOtp.map((digit, idx) => (
-                          <input
-                            key={idx}
-                            id={`phone-otp-${idx}`}
-                            className="otp-input"
-                            type="text"
-                            maxLength="1"
-                            inputMode="numeric"
-                            value={digit}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, "");
-                              const next = [...phoneOtp];
-                              next[idx] = val;
-                              setPhoneOtp(next);
-                              if (val && idx < 5)
-                                document
-                                  .getElementById(`phone-otp-${idx + 1}`)
-                                  ?.focus();
-                            }}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === "Backspace" &&
-                                !phoneOtp[idx] &&
-                                idx > 0
-                              ) {
-                                document
-                                  .getElementById(`phone-otp-${idx - 1}`)
-                                  ?.focus();
-                              }
-                            }}
-                          />
-                        ))}
-                      </div>
-
-                      <button
-                        className="primary submit-large"
-                        type="submit"
-                        disabled={phoneVerifyLoading}
-                      >
-                        {phoneVerifyLoading
-                          ? "Verifying..."
-                          : "Verify & Save Phone Number"}
-                      </button>
-                    </form>
-
-                    {/* Placed OUTSIDE the form with touch protection to prevent ghost submits */}
-                    <div style={{ textAlign: "center", marginTop: "14px" }}>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setPhoneStep("ENTER_PHONE");
-                          setSetupPhone("");
-                          setPhoneOtp(["", "", "", "", "", ""]);
-                          setPhoneVerifyMsg("");
-                        }}
-                      >
-                        ← Change Phone Number
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  <button
+                    className="primary submit-large"
+                    type="submit"
+                    disabled={phoneVerifyLoading}
+                  >
+                    {phoneVerifyLoading
+                      ? "Saving..."
+                      : user.phone
+                        ? "Save New Mobile Number"
+                        : "Save Mobile Number"}
+                  </button>
+                </form>
 
                 {phoneVerifyMsg && (
                   <div className="msg" role="status">
@@ -2002,7 +1882,7 @@ function App() {
                     <p>
                       {user.phone
                         ? `📞 +91 ${user.phone}`
-                        : "No verified phone linked"}
+                        : "No phone number linked"}
                     </p>
                     <span className="role-tag">{user.role}</span>
                   </div>
@@ -2015,8 +1895,7 @@ function App() {
                       className="text-link-button"
                       onClick={() => {
                         setSetupPhone(user.phone || "");
-                        setPhoneStep("ENTER_PHONE");
-                        setPhoneVerifyMsg("");
+                            setPhoneVerifyMsg("");
                         setActiveModal("phone-setup");
                       }}
                     >
@@ -2557,14 +2436,13 @@ function App() {
                 <div>
                   <strong>Complete your profile setup</strong>
                   <span>
-                    Please verify your unique mobile number to coordinate
+                    Add your mobile number to coordinate
                     pickups smoothly.
                   </span>
                 </div>
                 <button
                   className="primary setup-btn"
                   onClick={() => {
-                    setPhoneStep("ENTER_PHONE");
                     setSetupPhone("");
                     setPhoneVerifyMsg("");
                     setActiveModal("phone-setup");
