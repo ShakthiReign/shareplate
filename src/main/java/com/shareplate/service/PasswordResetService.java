@@ -22,7 +22,7 @@ import com.shareplate.repository.UserRepository;
 public class PasswordResetService {
 
 	private static final int TOKEN_BYTES = 32;
-	private static final int TOKEN_EXPIRY_MINUTES = 10
+	private static final int TOKEN_EXPIRY_MINUTES = 10;
 	private static final int MAX_ATTEMPTS = 5;
 	private static final int MIN_PASSWORD_LENGTH = 8;
 	private static final int MAX_PASSWORD_LENGTH = 72;
