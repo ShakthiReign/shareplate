@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 public class ResetPasswordRequest {
 
 	@NotBlank(message = "Reset token is required")
+	@NotBlank(message = "Email is required")
 	private String email;
 
 	@NotBlank(message = "6-digit OTP is required")
