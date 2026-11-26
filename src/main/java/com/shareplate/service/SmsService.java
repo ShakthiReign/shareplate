@@ -26,6 +26,9 @@ public class SmsService {
     @Value("${fast2sms.api.key:}")
     private String apiKey;
 
+    @Value("${sms.mock.enabled:true}")
+    private boolean mockEnabled;
+
     // Stores: phone -> {code, expiresAt}
     private final Map<String, OtpEntry> otpStorage = new ConcurrentHashMap<>();
 
@@ -48,9 +51,9 @@ public class SmsService {
         String otp = String.format("%06d", new SecureRandom().nextInt(1000000));
         otpStorage.put(cleanPhone, new OtpEntry(otp, System.currentTimeMillis() + (OTP_EXPIRY_MINUTES * 60 * 1000)));
 
-        if (apiKey != null && !apiKey.isBlank()) {
+        if (!mockEnabled && apiKey != null && !apiKey.isBlank()) {
             try {
-                String smsText = "Your Shareplate phone number verification OTP is : " + otp + 
+                String smsText = "Your Shareplate phone number verification OTP is : " + otp +
                                  "\nThis OTP is valid for " + OTP_EXPIRY_MINUTES + " minutes.";
 
                 String encodedMessage = URLEncoder.encode(smsText, StandardCharsets.UTF_8);
@@ -82,7 +85,7 @@ public class SmsService {
             }
         } else {
             log.info("==================================================");
-            log.info("SHAREPLATE FAST2SMS DEV OTP for {}: {}", cleanPhone, otp);
+            log.info("SHAREPLATE DEV OTP for {}: {}", cleanPhone, otp);
             log.info("==================================================");
         }
 
